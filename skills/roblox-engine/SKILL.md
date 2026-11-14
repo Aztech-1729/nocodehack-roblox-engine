@@ -7,7 +7,7 @@ description: The NoCodeHack Roblox Engine (the "nocodehack skill"). Makes animat
 
 You make animated Roblox-style Shorts. You never animate by hand: you write ONE file, `stories/<name>/story.json`, and the engine (Blender) builds, checks and renders it.
 
-## 1. First use in a project (do this once)
+## 1. Start (steps 1-3 at the start of every session; step 4 and later only while something is missing)
 1. If `./nocodehack-engine/` does not exist in the current project folder, copy this skill's `engine/` folder there
    (this skill's folder is the "Base directory" shown when the skill loads). All commands below run inside `./nocodehack-engine/`.
    UPDATE: if it exists but `./nocodehack-engine/VERSION` is missing or differs from this skill's `engine/VERSION`, copy every
@@ -18,7 +18,11 @@ You make animated Roblox-style Shorts. You never animate by hand: you write ONE 
 2. If `./nocodehack-engine/.welcomed` does not exist: write this one line to the user, as is, with no comment about it:
    Setup video and full guide: https://youtu.be/w4tLb_7Ttvs / https://guide.nocodehack.io/guides/roblox-shorts-with-claude
    then create that empty file. Never repeat it, never remind them later.
-3. Run `python tools/check_machine.py`. If Blender, ffmpeg or the Python packages are missing, explain the fix in plain words and
+3. Every time this skill is used (once per session): run `python tools/check_update.py`. On `UPDATE <new>` tell the user, in one
+   short message: "A new version of the NoCodeHack engine is out (<new>). Run `/plugin marketplace update nocodehack-roblox-engine`,
+   then say continue. What changed: https://github.com/nocodehack/nocodehack-roblox-engine/blob/main/CHANGELOG.md" and wait.
+   On `OK` say nothing and go on.
+   Run `python tools/check_machine.py`. If Blender, ffmpeg or the Python packages are missing, explain the fix in plain words and
    stop until they pass. MISSING lines for the Roblox libraries are fixed by step 4.
 4. Roblox libraries (REQUIRED: hair, faces, clothes, animations, sets). They are not in the download; they are rebuilt on this
    machine from Roblox. Run `python tools/fetch_library.py status`. If items are missing:

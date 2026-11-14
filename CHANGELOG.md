@@ -3,6 +3,18 @@
 Every fix to the NoCodeHack Roblox Engine, newest first: what you saw, why it happened, what changed, and how it was tested.
 Found a problem? Open an issue or comment on the video, it lands here.
 
+## 1.2.0 · 2026-11-15 · Claude tells you when a new version is out
+
+**What you saw:** nothing. Fixes were published on GitHub, but the skill on your PC stayed old and nobody told you.
+
+**Why:** the plugin on your PC only updates when you update it, and the skill never checked for a newer version.
+
+**What changed:** at the start of every session the skill reads one tiny public file from this repo (the version number;
+nothing about you is sent). If a newer version is out, Claude tells you once, with the update command and a link to this
+changelog. Offline or GitHub down: it skips the check and carries on.
+
+**Tested:** older copy -> `UPDATE 1.1.0 (you have 1.0.0)`; same version -> `OK 1.1.0`; no network -> `OK (no check)`.
+
 ## 1.1.0 · 2026-11-14 · Hair setup now gets all 49 Roblox hairs (was 14)
 
 **What you saw:** after the Roblox Studio setup step, many hairs were missing (characters fell back to plain hair), and
