@@ -3,6 +3,18 @@
 Every fix to the NoCodeHack Roblox Engine, newest first: what you saw, why it happened, what changed, and how it was tested.
 Found a problem? Open an issue or comment on the video, it lands here.
 
+## 1.4.1 · 2026-11-15 · "Washed-out" drafts explained
+
+**What you saw:** in the draft, night close-ups looked blown out: grey hair, pale faces.
+
+**Why:** the draft is a fast preview with approximate light. The same frame in the real render looks right (brown hair,
+normal face). Claude was judging, and showing you, the draft as if it were final.
+
+**What changed:** the skill now tells Claude never to judge light from the draft. It renders one real frame of the
+scene (about a minute) before changing colours or light, and tells you the draft is a rough preview.
+
+**Tested:** the washed-out close-up from a test story rendered at `mid`: correct colours in 14 seconds.
+
 ## 1.4.0 · 2026-11-15 · Anime fights get the real flame aura
 
 **What you saw:** in Dragon Ball style fights the power-up aura was a plain glowing ball, not the flames in the README clips.

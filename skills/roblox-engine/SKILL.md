@@ -97,6 +97,10 @@ that scene with `--only N --tier draft`:
 | a prop nobody can see | a `look` or `grab` beat on it (insert close-up) |
 | a fight filmed from behind | `profile: true` + `keep_two: true` |
 Stop when a round finds nothing new. Tell the user in one line what you fixed.
+The draft's light and colours are a fast approximation (night close-ups look washed out, hair can look grey). Never judge
+light from the draft: render one real frame of the scene in question first (about 1 minute):
+`python story.py stories/<name>/story.json --tier mid --only N --frames F-F` -> `stories/<name>/scenes/sNN/out/mid/<F>.png`,
+and say so when you show the user a draft ("the draft is a rough preview; the light is final in the render").
 
 A change by one sentence ("make it again, but slower, and make Vegeta cry a little") = edit story.json, then repeat from step 2.
 Only teach the engine something new (new move, effect, camera rule) when the user asks; that is engine code and costs much more usage.
