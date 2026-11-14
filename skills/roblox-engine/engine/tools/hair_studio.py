@@ -106,12 +106,15 @@ def collect(js, pad=400):
         for k, body in entries(r['t0'] - pad, r['t1'] + pad):
             (meshes if k == 'mesh' else texs).append((k, body))
         if not (d / 'mesh.obj').exists():
+            want = (meta['verts'], meta['tris']) if meta.get('verts') else None   # manifest shape: the window also holds OTHER hairs' meshes
             ok = None
             for _, body in sorted(meshes, key=lambda x: -len(x[1])):
-                try: ok = mesh_to_obj(body, d / 'mesh.obj'); break
-                except Exception as e: last = e
+                try: vt = mesh_to_obj(body, d / 'mesh.obj')
+                except Exception: continue
+                if want is None or tuple(vt) == tuple(want): ok = vt; break
             if not ok:
-                print('NOMESH', r['id'], slug, 'candidates', [m[1][:12] for m in meshes]); continue
+                (d / 'mesh.obj').unlink(missing_ok=True)   # left for scan_cache (whole cache, matched by shape)
+                print('NOMESH', r['id'], slug, 'candidates', len(meshes)); (d / 'meta.json').write_text(json.dumps(meta, indent=1)); continue
             meta['verts'], meta['tris'] = ok
         if not (d / 'tex.png').exists() and texs:
             k, body = texs[0]
@@ -120,6 +123,88 @@ def collect(js, pad=400):
         (d / 'meta.json').write_text(json.dumps(meta, indent=1))
         print('HAIR', r['id'], d.name, r.get('kind'), 'verts', meta.get('verts'), 'att', bool(meta.get('att')), 'tex', (d / 'tex.png').exists())
 
+
+
+def tex_sig(img):
+    """16x16 RGB thumbnail (base64, 1 KB) of a hair texture: ships in the manifest to recognise the texture in Studio's cache."""
+    import base64, numpy as np
+    from PIL import Image
+    im = img if hasattr(img, 'convert') else Image.open(img)
+    return base64.b64encode(np.asarray(im.convert('RGB').resize((16, 16), Image.BILINEAR), dtype=np.uint8).tobytes()).decode()
+
+
+def _all_payloads():
+    """Every payload in Studio's content cache (files + inline sqlite rows), whatever its age."""
+    got = []
+    for f in (RBX / 'rbx-storage').glob('*/*'):
+        try: k, b = payload(f.read_bytes())
+        except OSError: continue
+        if k: got.append((k, b))
+    tmp = Path(tempfile.mkdtemp())
+    for ext in ('', '-wal', '-shm'):
+        p = RBX / f'rbx-storage.db{ext}'
+        if p.exists(): shutil.copy(p, tmp / f'db{ext}')
+    c = sqlite3.connect(tmp / 'db')
+    for content, in c.execute('select content from files where content is not null'):
+        k, b = payload(content)
+        if k: got.append((k, b))
+    c.close()
+    return got, tmp
+
+
+def scan_cache(dirs, max_diff=0.03):
+    """Hair folders (seeded meta with verts/tris/tex_sig) -> mesh.obj by exact verts/tris, tex.png by nearest tex_sig.
+    The time-window collect misses hairs Studio already had cached (a cache hit writes nothing new; 14/49 on 2026-11-13,
+    trace/20261114-hair-cache-scan.md); this scans the WHOLE cache, so it also works on a second run."""
+    import base64, io, numpy as np
+    from PIL import Image
+    want_m, want_t = {}, {}
+    for d in dirs:
+        m = json.loads((d / 'meta.json').read_text(encoding='utf-8'))
+        if not (d / 'mesh.obj').exists() and m.get('verts'): want_m.setdefault((m['verts'], m['tris']), []).append(d)
+        if m.get('tex_sig'):   # missing, or a wrong texture from the time-window collect -> find the right one
+            s = np.frombuffer(base64.b64decode(m['tex_sig']), dtype=np.uint8).astype(np.float32).reshape(16, 16, 3) / 255
+            size = tuple(m['tex_size']) if m.get('tex_size') else None
+            if not (d / 'tex.png').exists(): want_t[d] = (s, size)
+            else:
+                im = Image.open(d / 'tex.png')
+                if (size and im.size != size) or np.abs(np.asarray(im.convert('RGB').resize((16, 16), Image.BILINEAR), dtype=np.float32) / 255 - s).mean() > max_diff:
+                    want_t[d] = (s, size)
+    if not want_m and not want_t: return 0, 0
+    got, tmp = _all_payloads(); nm = nt = 0
+    for k, body in got:
+        if k != 'mesh' or not want_m: continue
+        o = tmp / 'm.obj'
+        try: vt = mesh_to_obj(body, o)
+        except Exception: continue
+        for d in want_m.pop(tuple(vt), []): shutil.copy(o, d / 'mesh.obj'); nm += 1
+    if want_t:
+        cand = []
+        for i, (k, body) in enumerate(got):
+            if k not in ('ktx', 'png'): continue
+            try:
+                if k == 'png': im = Image.open(io.BytesIO(body))
+                else: ktx2_png(body, tmp / 't.png'); im = Image.open(tmp / 't.png')
+                im.load(); cand.append((np.asarray(im.convert('RGB').resize((16, 16), Image.BILINEAR), dtype=np.float32) / 255, k, body, im.size))
+            except Exception: continue
+        for d, (s, size) in want_t.items():
+            if not cand: break
+            diff = np.array([np.abs(c[0] - s).mean() for c in cand])
+            ok = [i for i in range(len(cand)) if diff[i] <= max_diff]
+            if not ok: print('NOTEX', d.name, f'best {diff.min():.3f}'); continue
+            # the cache holds low-res copies of the same picture: exact original size first, else the largest close match
+            same = [i for i in ok if size and cand[i][3] == size]
+            i = min(same, key=lambda i: diff[i]) if same else max(ok, key=lambda i: (cand[i][3][0] * cand[i][3][1], -diff[i]))
+            if size and cand[i][3] != size: print('TEX size', d.name, cand[i][3], 'wanted', size)
+            _, k, body, _ = cand[i]
+            if k == 'png': (d / 'tex.png').write_bytes(body)
+            else: ktx2_png(body, d / 'tex.png')
+            nt += 1
+    shutil.rmtree(tmp, ignore_errors=True)
+    for (v, tr), ds in want_m.items():
+        for d in ds: print('NOMESH (cache scan)', d.name, 'verts', v, 'tris', tr)
+    print(f'cache scan: {nm} meshes, {nt} textures')
+    return nm, nt
 
 if __name__ == '__main__':
     a = sys.argv[1:]

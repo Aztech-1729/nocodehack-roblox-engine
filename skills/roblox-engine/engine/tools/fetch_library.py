@@ -117,8 +117,19 @@ def rbxmesh():
 def collect_hair():
     rbxmesh(); sys.path.insert(0, str(E / 'third_party' / 'RBXMesh'))
     for m in missing('hair'): seed(m, 'hair')
+    for m in manifest('hair'):   # repair installs made by the old collector: true shape/texture keys from the manifest,
+        d = A / 'hair' / m.name    # and a mesh with another hair's vertex count is removed so the cache scan replaces it
+        if not (d / 'meta.json').exists(): continue
+        mt, cur = meta(m), json.loads((d / 'meta.json').read_text(encoding='utf-8'))
+        for k in ('verts', 'tris', 'tex_sig', 'tex_size'):
+            if k in mt: cur[k] = mt[k]
+        (d / 'meta.json').write_text(json.dumps(cur, indent=1), encoding='utf-8')
+        if (d / 'mesh.obj').exists() and mt.get('verts'):
+            with open(d / 'mesh.obj', encoding='utf-8', errors='replace') as f: n = sum(1 for ln in f if ln.startswith('v '))
+            if n != mt['verts']: (d / 'mesh.obj').unlink(); print('WRONG MESH (replacing)', m.name, n, 'verts, want', mt['verts'])
     import hair_studio; hair_studio.collect('log')
-    from hair_fetch import asset, mesh_to_obj   # fallback: meshes Studio kept in memory only, via the public endpoint (some answer 401)
+    hair_studio.scan_cache([A / 'hair' / m.name for m in manifest('hair') if (A / 'hair' / m.name / 'meta.json').exists()])   # already-cached hairs
+    from hair_fetch import asset, mesh_to_obj   # last fallback: the public endpoint (answers 401 for most UGC hairs)
     from outfit_fetch import thumb
     import gzip
     for m in missing('hair'):
@@ -131,6 +142,14 @@ def collect_hair():
             if tid and not (d / 'tex.png').exists(): (d / 'tex.png').write_bytes(thumb(tid))
             print('HAIR (public)', m.name)
         except Exception as e: print('NOMESH (public too)', m.name, str(e)[:60])
+    from PIL import Image   # cache had only a low-res copy of the texture -> the public thumbnail (some originals came from there)
+    for m in manifest('hair'):
+        d = A / 'hair' / m.name; mt = meta(m); tid = re.sub(r'\D', '', mt.get('tex_id') or mt.get('colormap') or '')
+        if not (tid and mt.get('tex_size') and (d / 'tex.png').exists()) or Image.open(d / 'tex.png').size == tuple(mt['tex_size']): continue
+        try:
+            b = thumb(tid); w = Image.open(io.BytesIO(b)).size
+            if w[0] * w[1] > Image.open(d / 'tex.png').size[0] * Image.open(d / 'tex.png').size[1]: (d / 'tex.png').write_bytes(b); print('TEX (public thumb)', m.name, w)
+        except Exception as e: print('TEX low-res kept', m.name, str(e)[:60])
     unseed('hair'); status()
 
 

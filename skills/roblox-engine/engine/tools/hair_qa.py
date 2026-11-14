@@ -40,7 +40,7 @@ COL = opt('--color', '#3A2A1E'); OUT = Path(opt('--out', str(E / 'assets' / 'hai
 ids = [a for a in argv if not a.startswith('--') and a not in (COL, str(OUT), opt('--out', ''))]
 dirs = sorted(d for d in (E / 'assets' / 'hair').glob('*_*') if (d / 'mesh.obj').exists())
 if ids and ids != ['all']: dirs = [d for d in dirs if d.name.split('_', 1)[0] in ids]
-TMP = E / 'trace' / '_hairqa'; TMP.mkdir(exist_ok=True)
+TMP = E / 'trace' / '_hairqa'; TMP.mkdir(parents=True, exist_ok=True)
 S = rig.S
 
 

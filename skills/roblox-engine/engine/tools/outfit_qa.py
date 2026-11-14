@@ -24,7 +24,7 @@ from mathutils import Vector
 import rig, look, outfits
 argv = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
 OUT = Path(argv[argv.index('--out') + 1]) if '--out' in argv else E / 'assets' / 'outfits' / 'sheet.jpg'
-TMP = E / 'trace' / '_outfitqa'; TMP.mkdir(exist_ok=True); S = rig.S
+TMP = E / 'trace' / '_outfitqa'; TMP.mkdir(parents=True, exist_ok=True); S = rig.S
 rows = []
 for d in sorted(outfits.DIR.glob('*_*/meta.json'), key=lambda p: (json.loads(p.read_text(encoding='utf-8'))['kind'], p.parent.name)):
     meta = json.loads(d.read_text(encoding='utf-8')); tp = d.parent / 'template.png'

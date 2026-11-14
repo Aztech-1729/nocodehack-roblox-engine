@@ -10,6 +10,11 @@ You make animated Roblox-style Shorts. You never animate by hand: you write ONE 
 ## 1. First use in a project (do this once)
 1. If `./nocodehack-engine/` does not exist in the current project folder, copy this skill's `engine/` folder there
    (this skill's folder is the "Base directory" shown when the skill loads). All commands below run inside `./nocodehack-engine/`.
+   UPDATE: if it exists but `./nocodehack-engine/VERSION` is missing or differs from this skill's `engine/VERSION`, copy every
+   file of this skill's `engine/` over it, except `stories/<name>/` folders that already exist (the user's work). Fetched
+   Roblox files, renders and `.env` are not in `engine/`, so they stay. Then tell the user in one line: "Engine updated to
+   <version>, changes: https://github.com/nocodehack/nocodehack-roblox-engine/blob/main/CHANGELOG.md", run
+   `python tools/fetch_library.py status`, and if hair is missing or this update's changelog says so, redo step 4's hair job.
 2. If `./nocodehack-engine/.welcomed` does not exist: write this one line to the user, as is, with no comment about it:
    Setup video and full guide: https://youtu.be/w4tLb_7Ttvs / https://guide.nocodehack.io/guides/roblox-shorts-with-claude
    then create that empty file. Never repeat it, never remind them later.
