@@ -70,6 +70,33 @@ Working examples: `stories/pro_bad_grade`, `stories/pro_complex_fight`, the Drag
 6. Sound + captions + format overlays (header, cards, freeze, split, narrator): `python tools/sound_mix.py stories/<name>/story.json`.
    LOOK at one frame per card/caption before calling it done.
 
+### Make it look good (the engine films what the story gives it)
+The camera cuts on actions: a story with few beats gets few shots. Before step 2, check the story against this list:
+- Density: a beat every 1-1.5 s per scene. Every spoken line gets a REACTION from the listener on the next beat (`face` change,
+  `look`, a pose such as `facepalm_R`, `shrug`, `arms_crossed`, `recoil`, or an anim emote). Silence = something moves.
+- Give the camera moments: an ENTRANCE (walk in from a door or off-frame, not standing there at t 0), a PROP the hero `look`s
+  at or `grab`s (the engine adds an insert close-up on it), one big emotion beat near the end of each scene (the engine adds
+  an extreme close-up on the strongest one), a physical gag (fall, jump, run, knockback) when the idea allows it.
+- Shots: the first shot at t 0 on a character, `on` = characters only (a prop in `on` fails the face gate; the engine finds
+  the prop itself). Mix sizes: wide/full for blocking, medium for talk, close for the punchline face.
+- Faces: change `face` on every emotional turn; 4-6 different faces per character in a 30 s Short.
+- Colour: shirts must contrast with the yellow Roblox skin (no yellow/orange shirts on yellow skin); night/spooky scenes keep
+  hair and clothes light enough to read (no near-black clothes at night), or use `mood` `cool`/`default`.
+
+### Draft fix loop (step 4, up to 3 rounds)
+Open `draft_sheet.jpg` and write down every frame that has one of these problems, then fix it in story.json and rebuild
+that scene with `--only N --tier draft`:
+| You see | Fix |
+|---|---|
+| opening frame cuts a body in half, or a tiny-people wide | scene key `"establish": false`, first shot `medium` on the hero |
+| faces hidden under hair from above | scene key `"pitch": false` |
+| a character is a dark silhouette | lighter shirt/hair colour, or scene `mood` `default`/`warm` |
+| the same shot for 4+ frames | more beats (reactions, a look, a gesture) in that stretch |
+| back of a head instead of a face | `front: true` on the shot, or turn the character (`turn`) toward the camera |
+| a prop nobody can see | a `look` or `grab` beat on it (insert close-up) |
+| a fight filmed from behind | `profile: true` + `keep_two: true` |
+Stop when a round finds nothing new. Tell the user in one line what you fixed.
+
 A change by one sentence ("make it again, but slower, and make Vegeta cry a little") = edit story.json, then repeat from step 2.
 Only teach the engine something new (new move, effect, camera rule) when the user asks; that is engine code and costs much more usage.
 

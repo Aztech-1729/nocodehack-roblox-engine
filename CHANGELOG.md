@@ -3,6 +3,28 @@
 Every fix to the NoCodeHack Roblox Engine, newest first: what you saw, why it happened, what changed, and how it was tested.
 Found a problem? Open an issue or comment on the video, it lands here.
 
+## 1.3.0 · 2026-11-15 · More camera moments: Claude writes richer stories and fixes its own draft
+
+**What you saw:** flat Shorts: few shots, characters standing still, a dark silhouette, odd framing, "no camera moments".
+
+**Why:** the engine's camera cuts on actions: reactions, entrances, props, big emotions. A first story written from the
+skill had 9 beats and 7 shots for two scenes, so the camera had little to cut to. The skill also only said "look at the
+draft", so Claude saw problems and stopped there.
+
+**What changed (SKILL.md):**
+- "Make it look good": a beat every 1-1.5 s, a reaction to every line, an entrance, a prop the hero looks at or grabs (the
+  engine adds a close-up on it), one big emotion beat per scene (the engine adds an extreme close-up), 4-6 faces per
+  character, shirts that contrast with the yellow skin, readable night colours.
+- "Draft fix loop": Claude lists what is wrong in the draft frames and fixes it with the engine's own keys (opening
+  framing, faces under hair, silhouettes, backs of heads, fights from behind), up to 3 rounds, and tells you what it fixed.
+
+**Tested:** the same idea ("kid sneaks cookies at night, dad catches him") written before and after the rules.
+Before: 9 beats, 15 camera shots. After: 15 beats, 20 camera shots, an entrance through the door, readable dad, 8+ faces.
+
+| Before | After |
+|---|---|
+| <img src="docs/img/changelog/1.3.0_before.jpg" width="400"> | <img src="docs/img/changelog/1.3.0_after.jpg" width="400"> |
+
 ## 1.2.0 · 2026-11-15 · Claude tells you when a new version is out
 
 **What you saw:** nothing. Fixes were published on GitHub, but the skill on your PC stayed old and nobody told you.
