@@ -3,6 +3,19 @@
 Every fix to the NoCodeHack Roblox Engine, newest first: what you saw, why it happened, what changed, and how it was tested.
 Found a problem? Open an issue or comment on the video, it lands here.
 
+## 1.4.0 · 2026-11-15 · Anime fights get the real flame aura
+
+**What you saw:** in Dragon Ball style fights the power-up aura was a plain glowing ball, not the flames in the README clips.
+
+**Why:** the flame sprites are Roblox Creator Store images, so they are not stored in this repo, and the setup never
+downloaded them. Without them the engine falls back to simple glow spheres.
+
+**What changed:** `python tools/fetch_library.py public` now also downloads the 14 aura sprites from Roblox's public
+image service (no Roblox Studio needed), and `status` shows an `aura` line. When the engine updates, Claude re-runs any
+missing setup step by itself.
+
+**Tested:** clean install without the sprites: 14/14 downloaded, all pixel-identical to the ones used for the README clips.
+
 ## 1.3.0 · 2026-11-15 · More camera moments: Claude writes richer stories and fixes its own draft
 
 **What you saw:** flat Shorts: few shots, characters standing still, a dark silhouette, odd framing, "no camera moments".

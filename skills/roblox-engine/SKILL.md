@@ -14,7 +14,8 @@ You make animated Roblox-style Shorts. You never animate by hand: you write ONE 
    file of this skill's `engine/` over it, except `stories/<name>/` folders that already exist (the user's work). Fetched
    Roblox files, renders and `.env` are not in `engine/`, so they stay. Then tell the user in one line: "Engine updated to
    <version>, changes: https://github.com/nocodehack/nocodehack-roblox-engine/blob/main/CHANGELOG.md", run
-   `python tools/fetch_library.py status`, and if hair is missing or this update's changelog says so, redo step 4's hair job.
+   `python tools/fetch_library.py status`, and for every line that is missing redo step 4 (`public` first, then the Studio jobs only if
+   something is still missing).
 2. If `./nocodehack-engine/.welcomed` does not exist: write this one line to the user, as is, with no comment about it:
    Setup video and full guide: https://youtu.be/w4tLb_7Ttvs / https://guide.nocodehack.io/guides/roblox-shorts-with-claude
    then create that empty file. Never repeat it, never remind them later.
@@ -26,7 +27,7 @@ You make animated Roblox-style Shorts. You never animate by hand: you write ONE 
    stop until they pass. MISSING lines for the Roblox libraries are fixed by step 4.
 4. Roblox libraries (REQUIRED: hair, faces, clothes, animations, sets). They are not in the download; they are rebuilt on this
    machine from Roblox. Run `python tools/fetch_library.py status`. If items are missing:
-   - `python tools/fetch_library.py public` (faces + clothes, automatic, ~5 min).
+   - `python tools/fetch_library.py public` (faces, clothes and the anime aura flames, automatic, ~5 min).
    - Tell the user, in one short message: "Open Roblox Studio (any place, Edit mode, logged in) with the Studio MCP connected, and
      tell me when it is open. I will grab the hair, animations and sets from it (~20 min). Nothing is saved or published."
      When they confirm, run `python tools/fetch_library.py jobs` and do every step of `library/jobs/JOBS.md` in order with the

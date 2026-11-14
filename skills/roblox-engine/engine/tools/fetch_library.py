@@ -16,6 +16,9 @@ sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 NEED = {'hair': ('mesh.obj', 'meta.json'), 'faces': ('face.png', 'meta.json'), 'outfits': ('template.png', 'meta.json'),
         'anims': ('anim.json', 'meta.json'), 'rbxsets': ('scene.json',)}
 RBXMESH = 'https://github.com/PrintedScript/RBXMesh/archive/refs/heads/main.zip'   # AGPL: fetched here, never shipped
+AURA_DIR = A / 'vfx' / 'aura_ref' / 'ssj_8092379429'   # Roblox Super Saiyan aura sprites (Creator Store 8092379429), used by vfx.py
+AURA_IDS = ('3074825547', '6187230339', '6584659046', '6584673054', '6741260601', '6954174382', '7186223155', '7216848401',
+            '7387058218', '7447354430', '7447358016', '7451697448', '7451746284', '7451831540')
 R6_RIG = 'https://devforum.roblox.com/t/r6-ik-fk-blender-rig-v25/3586405'
 
 
@@ -53,6 +56,8 @@ def status():
     for k in NEED:
         n, miss = len(manifest(k)), len(missing(k))
         print(f'{k:8s} {n - miss}/{n}' + ('' if not miss else f'  missing {miss}'))
+    na = sum((AURA_DIR / f'{i}.png').exists() for i in AURA_IDS)
+    print(f'aura     {na}/{len(AURA_IDS)}' + ('' if na == len(AURA_IDS) else '  missing (run public; without them auras fall back to plain glow spheres)'))
     r6 = (A / 'r6_parts.blend').exists()
     print(f"r6 parts {'OK' if r6 else 'missing (optional: authentic head mesh; download the rig at ' + R6_RIG + ', then blender -b <rig .blend> --factory-startup -P tools/extract_r6_parts.py)'}")
 
@@ -68,6 +73,11 @@ def public():
                     f'https://thumbnails.roblox.com/v1/assets?assetIds={tid}&size=420x420&format=Png'))['data'][0]['imageUrl']))).convert('RGBA')
             except Exception as e: print('FAIL', kind, m.name, str(e)[:80]); continue
             d = seed(m, kind); im.save(d / fname); print('OK', kind, m.name); time.sleep(0.25)
+    AURA_DIR.mkdir(parents=True, exist_ok=True)   # anime aura flames: same public thumbnail route, 700 px RGBA
+    for i in AURA_IDS:
+        if (AURA_DIR / f'{i}.png').exists(): continue
+        try: Image.open(io.BytesIO(thumb(i))).convert('RGBA').save(AURA_DIR / f'{i}.png'); print('OK aura', i); time.sleep(0.25)
+        except Exception as e: print('FAIL aura', i, str(e)[:80])
     status()
 
 
