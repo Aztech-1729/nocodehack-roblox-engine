@@ -55,7 +55,8 @@ No Blotato account yet? Sign-up link: https://blotato.com/?ref=nocodehack . Foll
 (`python tools/post_blotato.py post ...` without `--send`) and wait for the user's yes before `--send`. Default privacy = private.
 
 ## 2. Make a Short (the loop)
-Read `WRITER_GUIDE.md` (how to write a story) and `short.schema.md` (every key) before writing.
+Read `WRITER_GUIDE.md` (how to write a story), `DIRECTING.md` (how to direct it: structure, camera, acting timing) and
+`short.schema.md` (every key) before writing. Plan the intensity curve (DIRECTING rule 1) before the first beat.
 Use the Roblox libraries for every character (`lib:` hair, faces and clothes; tags are in `library/manifest/*/`).
 Working examples: `stories/pro_bad_grade`, `stories/pro_complex_fight`, the Dragon Ball Z parody `stories/parody_dbz_fight`
 (and `parody_dbz_fight_slower`, the same story changed by one sentence), and one `stories/fmt_*` per format. Then:

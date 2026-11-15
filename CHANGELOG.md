@@ -3,6 +3,37 @@
 Every fix to the NoCodeHack Roblox Engine, newest first: what you saw, why it happened, what changed, and how it was tested.
 Found a problem? Open an issue or comment on the video, it lands here.
 
+## 1.7.0 · 2026-11-15 · A directing guide: structure, camera and acting timing
+
+**What you saw:** stories that were flat: no build-up, stiff reactions, characters that are hard to tell apart, shots that
+don't serve the moment.
+
+**Why:** the skill told Claude *what* the engine can do, not *how to direct* a Short with it.
+
+**What changed:** a new `DIRECTING.md` that Claude reads before writing every story: 23 rules, each mapped to the story keys
+that do it. They were distilled in our own words from studying classic books on shot grammar, visual structure and
+animation timing, then tested on this engine. Some examples:
+- plan the intensity curve (hook, build, climax, payoff) before the first beat;
+- casting must read at a glance (a girl gets longer hair, leads never share hair or shirt colour);
+- shot size follows pressure; open scenes on a face, not a back;
+- listeners react 0.1-0.25 s late, faces change before the body moves, hold a key pose 0.4-0.5 s.
+
+**Tested:** the same idea ("a girl hides her new puppy from her mom") written by a fresh AI agent without and with the guide,
+judged by three independent critic agents next to two reference Shorts from a top Roblox creator, on one 0-10 scale:
+
+| Lens | Reference | Before | After |
+|---|---|---|---|
+| Acting | 8-8.5 | 4 | **5.5** |
+| Camera | 8 | 3 | **4** |
+| Story | 6-8 | 2 | **3** |
+
+All three picked the new version. There is still a gap to the reference (establishing shots, stiffer bodies), which the
+next releases work on.
+
+| Before | After |
+|---|---|
+| <img src="docs/img/changelog/1.7.0_before.jpg" width="400"> | <img src="docs/img/changelog/1.7.0_after.jpg" width="400"> |
+
 ## 1.6.0 · 2026-11-15 · Claude now catches characters that look alike
 
 **What you saw:** two characters you could not tell apart: both in near-black clothes (dark twins on screen), or the same
