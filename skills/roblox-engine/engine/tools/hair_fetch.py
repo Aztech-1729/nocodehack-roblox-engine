@@ -120,10 +120,11 @@ def fetch(aid, name=None):
     d = OUT / f'{aid}_{slug}'; d.mkdir(parents=True, exist_ok=True)
     (d / 'accessory.rbxm').write_bytes(acc)
     if not meta['mesh_id']: raise RuntimeError('no mesh id found')
+    meta.update({'id': str(aid), 'name': name or slug})
+    (d / 'meta.json').write_text(json.dumps(meta, indent=1))   # meta first: story_lint keys on mesh.obj + meta.json being complete together
     nv, nf = mesh_to_obj(asset(meta['mesh_id']), d / 'mesh.obj')
+    (d / 'meta.json').write_text(json.dumps({**meta, 'verts': nv, 'tris': nf}, indent=1))
     if meta['tex_id']: (d / 'tex.png').write_bytes(asset(meta['tex_id']))
-    meta.update({'id': str(aid), 'name': name or slug, 'verts': nv, 'tris': nf})
-    (d / 'meta.json').write_text(json.dumps(meta, indent=1))
     print('HAIR', aid, slug, meta['format'], 'verts', nv, 'tris', nf, 'att', 'yes' if meta['att'] else 'no', 'tex', bool(meta['tex_id']))
     return d
 

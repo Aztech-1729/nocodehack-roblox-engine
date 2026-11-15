@@ -299,7 +299,9 @@ def lint(story_path):
     total = 0.0; nsc = len(S.get('scenes', []))
     for si, sc in enumerate(S.get('scenes', [])):
         if not isinstance(sc, dict): R.err(f's{si + 1:02d}', 'scene', 'must be an object'); continue
-        total += float(sc.get('seconds', 0) or 0)
+        sec_ = sc.get('seconds', 0)
+        if isinstance(sec_, (int, float)): total += float(sec_ or 0)
+        else: R.err(f's{si + 1:02d}', 'seconds', f'{sec_!r} is not a number')
         lint_scene(R, L, S, sc, si, looks, sdir, fps)
     lint_formats(R, L, S, total, sdir)
     if total > 60.5: R.warn('story', 'seconds', f'total {total:.1f} s is over a 60 s Short -> trim scenes or beats')
@@ -622,7 +624,9 @@ def lint_scene(R, L, S, sc, si, looks, sdir, fps):
                     lt = last_attack.get(who)
                     if lt is not None and t - lt < 0.6: R.warn(w, 'attack', f'{t - lt:.2f} s after the previous strike of {who} -> leave >= 0.6 s (or use "flurry")')
                     last_attack[who] = t
-                else: last_attack[who] = t + float(a.get('s') or 0.3 * (len(fl_) - 1))
+                else:
+                    s_a = a.get('s') if isinstance(a.get('s'), (int, float)) else 0.3 * (len(fl_) - 1)
+                    last_attack[who] = t + float(s_a or 0.3 * (len(fl_) - 1))
         kb = b.get('knockback')
         if kb is not None:
             if not isinstance(kb, dict): R.err(w, 'knockback', 'must be {"from": "<name>", "distance": 8}')

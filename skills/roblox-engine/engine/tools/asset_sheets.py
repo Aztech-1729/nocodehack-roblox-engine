@@ -5,7 +5,12 @@ from PIL import Image, ImageDraw, ImageFont
 E = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(E, 'assets', 'kenney', 'sheets'); os.makedirs(OUT, exist_ok=True)
 cat = json.load(open(os.path.join(E, 'assets', 'kenney', 'catalog.json')))
-font = ImageFont.truetype('C:/Windows/Fonts/arial.ttf', 13)
+def _font(sz):   # a real font when the OS has one, PIL's built-in otherwise (this ran Windows-only before)
+    for f in ('C:/Windows/Fonts/arial.ttf', '/System/Library/Fonts/Supplemental/Arial.ttf', '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'):
+        if os.path.exists(f): return ImageFont.truetype(f, sz)
+    try: return ImageFont.load_default(sz)
+    except TypeError: return ImageFont.load_default()
+font = _font(13)
 T, COLS, ROWS = 170, 8, 6
 for z in sorted(glob.glob(os.path.join(sys.argv[1], '*.zip'))):
     kit = os.path.splitext(os.path.basename(z))[0]; zf = zipfile.ZipFile(z)

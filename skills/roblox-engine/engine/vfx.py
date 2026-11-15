@@ -303,6 +303,7 @@ def _sprite_material(tex_id, color, strength=3.0, alpha_k=1.0, mode='add', soft=
         if n_.type != 'OUTPUT_MATERIAL': nt.nodes.remove(n_)
     out = next(n_ for n_ in nt.nodes if n_.type == 'OUTPUT_MATERIAL')
     tex = nt.nodes.new('ShaderNodeTexImage'); path = AURA_DIR / f'{tex_id}.png'
+    if not (path.exists() or (KENNEY / f'{tex_id}.png').exists()): return _material(color)   # a partial sprite pack: flat colour, not a crash
     tex.image = bpy.data.images.load(str(path if path.exists() else KENNEY / f'{tex_id}.png'), check_existing=True)
     tint = nt.nodes.new('ShaderNodeMix'); tint.data_type = 'RGBA'; tint.blend_type = 'MULTIPLY'; tint.inputs['Factor'].default_value = 1.0
     nt.links.new(tex.outputs['Color'], tint.inputs['A']); tint.inputs['B'].default_value = (*rgb, 1)

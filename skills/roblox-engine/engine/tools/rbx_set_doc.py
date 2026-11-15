@@ -48,9 +48,13 @@ def worker(directory):
 
 def draw(data, path):
     from PIL import Image, ImageDraw, ImageFont
-    font = ImageFont.truetype('C:/Windows/Fonts/consola.ttf', 17)
-    small = ImageFont.truetype('C:/Windows/Fonts/consola.ttf', 14)
-    title = ImageFont.truetype('C:/Windows/Fonts/consolab.ttf', 24)
+    def _font(sz, bold=False):   # a real mono font when the OS has one, PIL's built-in otherwise
+        for f in (('C:/Windows/Fonts/consolab.ttf', 'C:/Windows/Fonts/consola.ttf') if bold else ('C:/Windows/Fonts/consola.ttf',),
+                  '/System/Library/Fonts/Menlo.ttc', '/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf' if bold else '/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf'):
+            if os.path.exists(f): return ImageFont.truetype(f, sz)
+        try: return ImageFont.load_default(sz)
+        except TypeError: return ImageFont.load_default()
+    font, small, title = _font(17), _font(14), _font(24, bold=True)
     x0, x1, y0, y1 = data['bounds']; pad = 70; side = 1050
     scale = (side - 2 * pad) / max(x1 - x0, y1 - y0)
     height = max(side + 30, 140 + 25 * len(data['pieces']))

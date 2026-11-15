@@ -62,7 +62,7 @@ def token():
 
 
 def iso(s):
-    return dt.datetime.fromisoformat(re.sub(r'(\.\d{6})\d*Z$', r'\1+00:00', s.replace('Z', '+00:00')) if s else None) if s else None
+    return dt.datetime.fromisoformat(re.sub(r'(\.\d{6})\d*Z$', r'\1+00:00', s) if s else None) if s else None
 
 
 # ---------------------------------------------------------------- prices (Cloud Billing Catalog, cached)
@@ -187,7 +187,10 @@ def gs(*a, check=True):
 
 def gs_ls(prefix):
     r = run([GSUTIL, 'ls', prefix], check=False, timeout=120)
-    return r.stdout.split() if r.returncode == 0 else []
+    if r.returncode != 0:
+        if 'matched no objects' in (r.stderr or '') or 'One or more URLs matched no objects' in (r.stderr or ''): return []   # nothing rendered yet: a fresh run
+        raise SystemExit(f'gsutil ls {prefix} failed (rc {r.returncode}): {r.stderr[-200:]}')   # a transient failure must not read as "all frames missing"
+    return r.stdout.split()
 
 
 def pack_upload(story, scene, tmp, rep):
@@ -196,7 +199,9 @@ def pack_upload(story, scene, tmp, rep):
     pk = os.path.join(tmp, 'pack.py'); open(pk, 'w').write(PACK)
     dst = os.path.join(tmp, f'{scene}.blend')
     r = run([BLENDER, '-b', src, '-P', pk, '--', dst, f'/gcs/{BUCKET}/hq/{story}/{scene}'], timeout=900)
-    f0, f1 = json.loads(re.search(r'RANGE (\[.*?\])', r.stdout).group(1))
+    m_ = re.search(r'RANGE (\[.*?\])', r.stdout)
+    assert m_, 'blender never printed RANGE (the pack script failed?): ' + r.stdout[-400:] + r.stderr[-200:]
+    f0, f1 = json.loads(m_.group(1))
     for d, tag in (json.loads(m) for m in re.findall(r'^SEQ (\[.*\])\r?$', r.stdout, re.M)):
         assert os.path.isdir(d), f'sequence folder missing: {d}'
         gs('-m', 'cp', '-r', os.path.join(d, '*'), f'gs://{BUCKET}/hq/{story}/{scene}/seq/{tag}/')
@@ -366,7 +371,7 @@ def reconcile():
         return
     for f in sorted(glob.glob(os.path.join(RENDERS, '*.json'))):
         r = json.load(open(f)); a = iso(r['start_utc']) - dt.timedelta(minutes=10); b = iso(r['end_utc']) + dt.timedelta(minutes=10)
-        q = (f"SELECT SUM(cost) c, ANY_VALUE(currency) cur FROM `{tbl}` WHERE project.id='{PROJECT}' AND usage_start_time >= '{a.isoformat()}' "
+        q = (f"SELECT SUM(cost) c, ANY_VALUE(currency) cur FROM `{tbl}` WHERE project.id='{PROJECT}' AND currency='EUR' AND usage_start_time >= '{a.isoformat()}' "
              f"AND usage_end_time <= '{b.isoformat()}' AND service.description IN ('Vertex AI','Compute Engine','Cloud Build','Cloud Storage','Artifact Registry')")
         res = api(f'https://bigquery.googleapis.com/bigquery/v2/projects/{PROJECT}/queries', {'query': q, 'useLegacySql': False})
         row = res.get('rows')
@@ -395,7 +400,9 @@ def main():
     ap.add_argument('--full', action='store_true', help='native 1080x1920 128 spp (default: fast 67 %% + 64 spp, upscaled)')
     a = ap.parse_args()
     global HQ_PCT, HQ_SPP, CUTOUT, SHADOW, ENVS, TURN
+    assert a.story or a.blend or a.reconcile or a.refresh_prices, 'story required (or --blend/--reconcile/--refresh-prices)'
     sj = os.path.join(ENG, 'stories', a.story or '', 'story.json'); fr_ = json.load(open(sj, encoding='utf-8')).get('frame') if a.story and os.path.exists(sj) else None
+    fr_ = fr_ if isinstance(fr_, list) and len(fr_) == 2 and all(isinstance(x, (int, float)) for x in fr_) else None
     OUT_WH = (a.res.lower().replace('x', ':') if a.res else f'{fr_[0]}:{fr_[1]}' if fr_ else '1080:1920')   # B1 story 'frame' (16:9)
     if a.full: HQ_PCT, HQ_SPP = 100, 128
     if a.turntable: TURN = a.turntable; a.frames = a.frames or f"0-{int(a.turntable.split(':')[0]) - 1}"

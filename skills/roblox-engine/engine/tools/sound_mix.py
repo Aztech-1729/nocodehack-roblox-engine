@@ -22,23 +22,26 @@ def scene_timeline(sc, rep, fps):
     """Resolve one scene: retimed beats/shots (seconds, scene-local) + walk spans. Returns dict."""
     beats = [dict(b) for b in sc.get('beats', [])]; beats.sort(key=lambda b: b['t'])
     shots = [dict(s) for s in sc.get('shots', [])]
-    for n in rep.get('notes', []):   # replay build.py retime_after / settle waits, in order
-        m = re.match(r't([\d.]+) (\S+) .*retimed \+([\d.]+)s', n)
-        if m:
-            t0, who, dl = float(m[1]), m[2], float(m[3])
-            i0 = next((i for i, b in enumerate(beats) if b.get('who') == who and abs(b['t'] - t0) < 0.011 and '_own' not in b), None)
-            if i0 is None: continue
-            beats[i0]['_own'] = dl
-            for b in beats[i0 + 1:]:
-                if b['t'] >= t0: b['t'] = round(b['t'] + dl, 3)
-            for s in shots:
-                if s['t'] > t0 + 1e-6: s['t'] = round(s['t'] + dl, 3)
-                elif s['t'] > t0 - 1e-6: s['t'] = round(s['t'] + max(0.0, dl - 0.6), 3)
-            continue
-        m = re.match(r't([\d.]+) (\S+) waits ([\d.]+)s', n)
-        if m:
-            b = next((b for b in beats if b.get('who') == m[2] and abs(b['t'] - float(m[1])) < 0.011 and '_wait' not in b), None)
-            if b: b['_wait'] = float(m[3])
+    def retime(t0, who, dl):   # replay one build.py retime_after on the beats/shots
+        i0 = next((i for i, b in enumerate(beats) if b.get('who') == who and abs(b['t'] - t0) < 0.011 and '_own' not in b), None)
+        if i0 is None: return
+        beats[i0]['_own'] = dl
+        for b in beats[i0 + 1:]:
+            if b['t'] >= t0: b['t'] = round(b['t'] + dl, 3)
+        for s in shots:
+            if s['t'] > t0 + 1e-6: s['t'] = round(s['t'] + dl, 3)
+            elif s['t'] > t0 - 1e-6: s['t'] = round(s['t'] + max(0.0, dl - 0.6), 3)
+    def settle_wait(t0, who, dl):
+        b = next((b for b in beats if b.get('who') == who and abs(b['t'] - t0) < 0.011 and '_wait' not in b), None)
+        if b: b['_wait'] = dl
+    if rep.get('timeline_events'):   # machine-readable twins of the notes, in build order (can't drift with wording)
+        for e in rep['timeline_events']: (retime if e['kind'] == 'retime' else settle_wait)(float(e['t']), e['who'], float(e['dl']))
+    else:                            # older reports: replay the human notes, in order
+        for n in rep.get('notes', []):
+            m = re.match(r't([\d.]+) (\S+) .*retimed \+([\d.]+)s', n)
+            if m: retime(float(m[1]), m[2], float(m[3])); continue
+            m = re.match(r't([\d.]+) (\S+) waits ([\d.]+)s', n)
+            if m: settle_wait(float(m[1]), m[2], float(m[3]))
     return {'beats': beats, 'shots': shots}
 
 
@@ -252,7 +255,9 @@ def mix(story_events, talks, total, mood, voice=True, music=True, seed=1, duck_d
 def loudness(path):
     p = subprocess.run(['ffmpeg', '-nostats', '-i', path, '-af', 'ebur128=peak=true', '-f', 'null', '-'], capture_output=True, text=True).stderr
     s = p[p.rfind('Summary:'):]
-    return float(re.search(r'I:\s+(-?[\d.]+) LUFS', s)[1]), float(re.search(r'Peak:\s+(-?[\d.]+) dBFS', s)[1])
+    i, pk = re.search(r'I:\s+(-?[\d.]+) LUFS', s), re.search(r'Peak:\s+(-?[\d.]+) dBFS', s)
+    if not (i and pk): raise SystemExit(f'loudness: ffmpeg gave no ebur128 summary (ffmpeg build too old or too new?) - stderr tail: {p[-300:]!r}')
+    return float(i[1]), float(pk[1])
 
 
 PRE = 'acompressor=threshold=0.1:ratio=3:attack=5:release=80,alimiter=limit=0.7:level=false'   # tame transients so loudnorm can reach -14
@@ -306,7 +311,7 @@ def ass(talks, path, story=None):
         if t1 - t0 < (0.08 if st == 'Word' else 0.2): continue   # a cut-off card flashing for a few frames reads as a glitch
         lines.append(f"Dialogue: 0,{ts(t0)},{ts(t1)},{st},,0,0,0,,{{\\fad(40,0)\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)}}{c}")
     if story.get('header') or story.get('cards') or FREEZES: lines += overlays.extra_events(story, SCENE_OFFS, FREEZES)
-    open(path, 'w', encoding='utf-8').write(h + '\n'.join(lines) + '\n')
+    with open(path, 'w', encoding='utf-8') as f_: f_.write(h + '\n'.join(lines) + '\n')
     return len(lines)
 
 

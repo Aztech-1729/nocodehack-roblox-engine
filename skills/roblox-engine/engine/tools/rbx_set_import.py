@@ -33,7 +33,9 @@ def asset_num(s):
 # ------------------------------------------------------------------ fetch (plain python)
 def studio_log():
     import hair_studio as hs
-    return max((hs.RBX / 'logs').glob('*Studio*'), key=lambda p: p.stat().st_mtime)
+    logs_ = list((hs.RBX / 'logs').glob('*Studio*'))
+    if not logs_: raise SystemExit('no Roblox Studio logs found - open Studio and run the set export first')
+    return max(logs_, key=lambda p: p.stat().st_mtime)
 
 
 def parse_log(aid):
@@ -398,6 +400,7 @@ def build(sdir, at=(0, 0), rot=0.0, scale=1.0, label=None, register=True, ground
             items.append((p, q[0] @ R.T + pos, q[1], q[3], q[2], ('tex', tex[did], tuple(dcl['col']), 'SmoothPlastic', round(dcl['tr'], 2))))
         if p.get('txt'): cnt['text_skipped'] += 1
     # set frame: footprint centre (excluding huge ground slabs), floor = top of the lowest large thin slab (else lowest bottom)
+    if not items: raise SystemExit('set import: every part was filtered out (fully transparent decals?)')
     allv = np.concatenate([it[1] for it in items]); wb = _p(allv)
     lo, hi = wb.min(0), wb.max(0)
     zfloor = lo[2]

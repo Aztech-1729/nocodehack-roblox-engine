@@ -340,7 +340,7 @@ def mode_shots(cm, shots, beats, cast, T_end, notes):
              next((b for b in reversed(bs) if strong(b) and b['t'] <= T_end - 0.6 and (b['who'] == cm['hero'] if cm.get('hero') in cast else 0.5 * T_end <= b['t'])), None))
         if p is None or p.get('who') not in cast: notes.append('camera punch_in: no punchline beat (a strong face in the second half)'); return shots, {}
         shots = shots or [{'t': 0.0, 'kind': 'medium', 'on': [hero]}]
-        shots = _splice(shots, T_end, p['t'] - 1.0, min(T_end, p['t'] + 1.4), {'kind': 'close', 'on': [p['who']], 'hold': True, 'move': 'still', 'punch': p['t'], 'lens': 50})
+        shots = _splice(shots, T_end, max(0.0, p['t'] - 1.0), min(T_end, p['t'] + 1.4), {'kind': 'close', 'on': [p['who']], 'hold': True, 'move': 'still', 'punch': p['t'], 'lens': 50})
         notes.append(f"camera punch_in: crash zoom on {p['who']} at t{p['t']:.2f}")
         return shots, {'ecu': False}
     # two_shot_react: the two-shot is the master, every strong face gets its close-up and the cut returns to the two-shot
@@ -447,6 +447,7 @@ def _anchor(subjects):
                 fac += Vector((math.sin(y), -math.cos(y), 0))
         else:
             pts.append(s.matrix_world.translation.copy())
+    if not pts: return Vector((0, 0, 1)), Vector((0, -1, 0)), []   # 'on' resolved to nothing: centre of the world, default facing
     c = sum(pts, Vector()) / len(pts)
     if fac.length < 0.4 and len(pts) >= 2:          # facing each other: shoot across their line, from the front (-Y)
         d = (pts[-1] - pts[0]); n = Vector((-d.y, d.x, 0)).normalized()
@@ -1044,7 +1045,7 @@ def _shot(sc, name, f0, f1, kind='medium', subjects=(), side=0.0, lens=50, push=
         aim.z = min(p.z for p in pts) - (4.62 - aim_z) * S
         if (sc.get('frame') or (1, 2))[0] > (sc.get('frame') or (1, 2))[1]: aim.z = (min(p.z for p in pts) + max(p.z for p in pts)) / 2   # B1 landscape: centre the bodies (the 9:16 low aim left half the frame as floor)
     cands = []
-    multi = len(pts) > 1 and not (moving and kind == 'insert' and len(subjects) == 1)   # a moving prop: insert size, tracked (homework give: 'grow' 5.0)
+    multi = len(pts) > 1 and not (moving and kind in ('close', 'insert') and len(subjects) == 1)   # a moving prop: insert size, tracked (homework give: 'grow' 5.0); a tracked close-up frames its subject, not the whole path
     if moving and kind in ('close', 'insert'): track = True    # a jumping/turning head must not leave a close-up
     # a WIDE/FULL shot of a MOVING character (runs out, chase): the action reads from the body; face report-only, head still gated
     # (reference shows backs in exits/chases; blind3 bedroom Ben ran out the door, R182). Ranking still prefers face-visible angles.
@@ -1076,7 +1077,7 @@ def _shot(sc, name, f0, f1, kind='medium', subjects=(), side=0.0, lens=50, push=
         ring = (0, -15, 15, -30, 25, -45); print('SHOT 3/4', name, 'face sideways to the audience -> side', side)
 
     def gen_cands(ring, lms, mild=False, angle=angle, hk=1.0):
-      cands = []
+      cands = []; relax = None   # a tiny room can filter every angle: keep the least-bad one as a last resort
       for dside in ring:   # lying focus (face to the sky/floor): any azimuth can work, try the full ring
         a = math.radians(side + dside)
         dirv = Vector((fac.x * math.cos(a) - fac.y * math.sin(a), fac.x * math.sin(a) + fac.y * math.cos(a), 0))
@@ -1109,7 +1110,7 @@ def _shot(sc, name, f0, f1, kind='medium', subjects=(), side=0.0, lens=50, push=
                     if pos[i] > hi_ - m and v > 1e-6: k = min(k, (hi_ - m - aim_[i]) / v)
                     if pos[i] < lo_ + m and v < -1e-6: k = min(k, (lo_ + m - aim_[i]) / v)
                 if k < 1.0:
-                    if L * k < 16: continue            # would need wider than 16 mm: skip this angle
+                    if L * k < 16: relax = relax or (aim_ + (pos - aim_) * max(k, 16.0 / L), aim_.copy(), max(L * k, 16.0), H / H0); continue
                     pos = aim_ + (pos - aim_) * k; L = L * k
             for _ in range(12):   # never INSIDE furniture (lockers, bookcases, counters): dolly in until clear
                 hit = any(x0 - 0.15 < pos.x < x1 + 0.15 and y0 - 0.15 < pos.y < y1 + 0.15 and pos.z < top + 0.1
@@ -1117,9 +1118,10 @@ def _shot(sc, name, f0, f1, kind='medium', subjects=(), side=0.0, lens=50, push=
                 if not hit: break
                 pos = aim_ + (pos - aim_) * 0.88; L *= 0.88
             else:
-                continue
+                relax = relax or (pos, aim_.copy(), max(L, 14.0), H / H0); continue   # still in furniture after 12 dollies: keep it as a last resort
             if L < 14: continue
             cands.append((pos, aim_.copy(), L, H / H0))
+      if not cands and relax: cands.append(relax)   # never return empty: max() on tried would kill the build
       return cands
     is_insert = kind == 'insert'
     cands = gen_cands(ring, (1.0, 0.8, 1.25)); ots = []
@@ -1167,6 +1169,7 @@ def _shot(sc, name, f0, f1, kind='medium', subjects=(), side=0.0, lens=50, push=
     on_key = ','.join(getattr(s_, 'name', '?') for s_ in subjects)
     targets = list(must_see) or [s.head_mesh for s in subj_chars] + [s for s in subjects if not hasattr(s, 'head_mesh')]
     targets = [m for t in targets for m in ([t] if t.type == 'MESH' else [o for o in t.children_recursive if o.type == 'MESH'][:2])]
+    if not targets: targets = [o for ch in subj_chars for o in (ch.torso, ch.head_mesh) if o.type == 'MESH']   # an EMPTY subject (no mesh children) still needs vis targets
     occluders = [o for ch in cast if ch not in subj_chars for o in (ch.torso, ch.head_mesh, *ch.arms, *[h for h in ch.hair_pivot.children if h.type == 'MESH' and h.name.startswith('hair lib')])] + [a for ch in subj_chars for a in ch.arms]
     people = [o for ch in cast for o in (ch.torso, ch.head_mesh, *ch.arms)]   # nearest SURFACE of any body part
     frames = sorted({f0, f0 + (f1 - f0) // 4, (f0 + f1) // 2, f0 + 3 * (f1 - f0) // 4, f1})

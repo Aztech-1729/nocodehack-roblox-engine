@@ -514,7 +514,7 @@ def spring_follow(sc, driver, follower, frames, stiffness=0.22, damping=0.32, ga
     for f in frames:
         sc.frame_set(f); bpy.context.view_layer.update()
         e = driver.matrix_world.to_euler()
-        w = [0.0, 0.0, 0.0] if prev is None else [e[i] - prev[i] for i in range(3)]
+        w = [0.0, 0.0, 0.0] if prev is None else [e[i] - prev[i] for i in range(2)] + [(e[2] - prev[2] + math.pi) % math.tau - math.pi]   # yaw wraps at 180 deg
         prev = e
         for i in axes:
             v[i] += -stiffness * r[i] - damping * v[i] - gain * w[i]
