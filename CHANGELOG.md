@@ -3,6 +3,28 @@
 Every fix to the NoCodeHack Roblox Engine, newest first: what you saw, why it happened, what changed, and how it was tested.
 Found a problem? Open an issue or comment on the video, it lands here.
 
+## 1.11.1 · 2026-11-15 · Reliability fixes from a community audit (thanks @Aztech-1729)
+
+Our first outside contribution: [@Aztech-1729](https://github.com/Aztech-1729) audited the engine line by line
+([PR #1](https://github.com/nocodehack/nocodehack-roblox-engine/pull/1)). We reviewed every change, tested it, kept what
+helps, fixed three issues on top, and merged.
+
+**The big one: format overlays were broken.** The "choice" and "time card" formats drew large white boxes over the video
+because the subtitle style tags were being turned into invisible control characters. Now they look as designed:
+
+<img src="docs/img/changelog/1.11.1_overlays.jpg" width="800">
+
+**Also fixed:** a crash in very small rooms (no camera position fit), crashes on story typos (an unknown walk target or shot
+subject, a prop held by someone not in the scene, `desk:9`, `speed: 0`, an empty walk), long walks that ran into the next
+action, sound effects that could drift if the build's notes changed wording, a clear error when ffmpeg is missing, safer
+cloud-render and download tools, and more (full list in the PR).
+
+**Kept out:** a change that would have altered the desert look of the anime showcase, one creator-tool tweak, and a billing
+filter that only works for one currency (reasons in the PR).
+
+**Tested:** every story passes the checks; on 9 benchmark stories all 22 scenes pass, 6 are unchanged and 3 improved or
+stayed equal; overlays checked on real renders before and after.
+
 ## 1.11.0 · 2026-11-15 · Claude now catches the same shot repeated
 
 **What you saw:** one character shown again and again in the same chest-up shot, so the Short felt like one long take.
