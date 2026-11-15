@@ -916,7 +916,7 @@ def make_crowd(sc, spec, cast, n, log):
 def build(spec, log):
     bpy.ops.wm.read_factory_settings(use_empty=True)
     T0_ = time.time(); TT_ = {}   # stage timers -> log['timing'] (speed work, R147)
-    ia.reset(); assets.reset(); HELD_PROPS.clear(); THROWS.clear(); rig.CAST.clear(); faces._LIB.clear(); sets.M.clear(); __import__('rooms').M.clear(); camera.LAST['cam'] = None
+    ia.reset(); assets.reset(); HELD_PROPS.clear(); THROWS.clear(); rig.CAST.clear(); faces._LIB.clear(); sets.M.clear(); __import__('rooms').M.clear(); camera.LAST['cam'] = None; __import__('fight')._CATCH.clear()
     sc = bpy.context.scene
     fps = spec.get('fps', 24); sc.render.fps = fps
     if spec.get('frame'):   # B1 opt-in output size, e.g. [1920, 1080] (16:9); default 1080x1920. Cameras are measured at half size
@@ -1052,7 +1052,9 @@ def build(spec, log):
     for p in spec.get('props', []):
         if p.get('on'):    # 'desk:i' (classroom) or the name of any placed set piece ('coffee table', 'counter', ...)
             if p['on'].startswith('desk') and 'info' not in st:
-                i = int(p['on'].split(':')[1]) if ':' in p['on'] else 0
+                try: i = int(p['on'].split(':')[1]) if ':' in p['on'] else 0
+                except ValueError: i = 0
+                i = min(max(i, 0), len(st['supports']) - 1)   # desk:3 in a 2-desk set clamps to the last desk
                 x0, x1, y0, y1, top = st['supports'][i]
             else:
                 x0, x1, y0, y1, top = assets.support(p['on'])
@@ -1076,6 +1078,9 @@ def build(spec, log):
 
     held = []   # props that start in a hand: {'held_by': 'Max', 'hand': 'R'} -> carry pose at f0, prop placed in the hand, grabbed
     for p in spec.get('props', []):
+        if p.get('held_by') and p['held_by'] not in cast:
+            log.setdefault('notes', []).append(f"prop {p['name']} held_by '{p['held_by']}': not in this scene cast -> starts placed instead")
+            p.pop('held_by')
         if p.get('held_by'):
             ch, hand = cast[p['held_by']], p.get('hand', 'R'); pr = props[p['name']]
             poses.beat(sc, ch, 'carry_' + hand, 0, move=1)
@@ -1123,6 +1128,8 @@ def build(spec, log):
     def walk_to(ch, who, wl, f, b, beats):
         """Walk along wl (points in studs, or a prop/character NAME as a goal). A prop goal ends on the clear spot where the hand
         reaches it (approach_spot); a character goal stops staging walk_up_stop short (clear of their body at arrival, waiting if they still move), facing them. Returns the settled frame or None."""
+        spd_ = max(b.get('speed', 9.5), 0.1)   # speed: 0 divided by it in every eta below
+        if not wl: settle[who] = max(settle.get(who, 0), f); return f   # {"walk": []}: a no-op, degenerates to a turn in place
         f = max(f, settle.get(who, 0))
         sc.frame_set(f); bpy.context.view_layer.update()
         p0 = ch.root.matrix_world.translation; path = [(p0.x, p0.y)]; yaw_end = None
@@ -1140,7 +1147,7 @@ def build(spec, log):
                 c, rad_g, zl, zh, so = grab_geom(props[el])
                 rad = rad_g if so else rad_g - ia.LIMB_HALF; top = (zl + zh) / 2     # approach_spot adds the limb half itself
                 others = [tuple(o.root.matrix_world.translation)[:2] for o in cast.values() if o is not ch]
-                eta_ = f + int(math.hypot(c[0] - path[-1][0], c[1] - path[-1][1]) / (b.get('speed', 9.5) * S) * fps) + 8
+                eta_ = f + int(math.hypot(c[0] - path[-1][0], c[1] - path[-1][1]) / (spd_ * S) * fps) + 8
                 sc.frame_set(eta_)   # where the others STAND when this walker arrives (earlier beats are keyed: Lia walked up next to Zed)
                 others += [tuple(o.root.matrix_world.translation)[:2] for o in cast.values() if o is not ch]
                 sc.frame_set(f)
@@ -1189,7 +1196,7 @@ def build(spec, log):
                 path.append((gx, gy)); yaw_end = math.atan2(cx_ - gx, -(cy_ - gy))
             elif isinstance(el, str) and el in cast:   # aim where they will BE on arrival (they may be moving: sitting, walking)
                 px, py = path[-1]; q = cast[el].root.matrix_world.translation
-                eta = f + int(math.hypot(q.x - px, q.y - py) / (b.get('speed', 9.5) * S) * fps) + 8
+                eta = f + int(math.hypot(q.x - px, q.y - py) / (spd_ * S) * fps) + 8
                 if settle.get(el, 0) > eta:   # the target is still on the move: aim at where it STOPS and wait to set off,
                     late = settle[el] - eta   # so the two never converge on a moving spot (R131 Max met walking Lia head-on)
                     f += late; eta += late
@@ -1229,7 +1236,7 @@ def build(spec, log):
                 # be then); a route could end inside a fridge / bench (R146 Codex #1-2: 70 + 219 part-frame hits) -> nearest clear spot
                 px, py = path[-1]; e_ = (el[0] * S, el[1] * S); bd = st.get('bounds')
                 if bd: e_ = (min(max(e_[0], bd[0] + 0.35), bd[1] - 0.35), min(max(e_[1], bd[2] + 0.35), bd[3] - 0.35))
-                eta = f + int(math.hypot(e_[0] - px, e_[1] - py) / (b.get('speed', 9.5) * S) * fps) + 8
+                eta = f + int(math.hypot(e_[0] - px, e_[1] - py) / (spd_ * S) * fps) + 8
                 y_in = math.atan2(e_[0] - px, -(e_[1] - py)) if math.hypot(e_[0] - px, e_[1] - py) > 1e-6 else ch.root.rotation_euler.z
                 world.invalidate()   # ... and as they END UP: one still on its way to this same spot arrives after `eta` (R228 store)
                 for _ in range(3):   # a moved goal changes the arrival heading (a leaning pose is not symmetric): check again
@@ -1356,7 +1363,7 @@ def build(spec, log):
                     if bd and not (bd[0] + .3 < alt[0] < bd[1] - .3 and bd[2] + .3 < alt[1] < bd[3] - .3): continue
                     # PRE-SCREEN (speed): one body query at the alternate spot when it matters (arrival for a stop, start for a
                     # launch) before keying a whole trial walk (29 keyed trials made blind_park s01 take 1360 s, R160)
-                    fr_q = f if launch else min(n - 1, f + int(math.dist(origin, alt) / (b.get('speed', 9.5) * S) * fps) + 8)
+                    fr_q = f if launch else min(n - 1, f + int(math.dist(origin, alt) / (spd_ * S) * fps) + 8)
                     y_q = math.atan2(goal[0] - origin[0], -(goal[1] - origin[1])) if math.dist(origin, goal) > 1e-6 else ch.root.rotation_euler.z
                     if world.query(ch, alt, y_q, fr_q).depth_m > 0: continue
                     route = plan_path(alt if launch else origin, goal if launch else alt, obs_r, bd, others_xy)
@@ -1565,6 +1572,10 @@ def build(spec, log):
             v_ = b_.get(k_)
             if isinstance(v_, str) and not known_(v_):
                 log.setdefault('notes', []).append(f"t{b_['t']} {b_['who']} {k_} '{v_}': unknown target -> dropped"); b_.pop(k_)
+        if isinstance(b_.get('walk'), list):   # walk targets are exact names (no prefix match): an unknown string did el[0] * S on a str
+            b_['walk'] = [w_ for w_ in b_['walk'] if not isinstance(w_, str) or known_(w_) or
+                          (log.setdefault('notes', []).append(f"t{b_['t']} {b_['who']} walk '{w_}': unknown target -> dropped") or False)]
+            if not b_['walk']: b_.pop('walk')
     # AUTO EXPRESSION: a pose with no face picks a matching Roblox library face (critic: 'the same frown in 7 of 16 frames');
     # the writer's own face always wins
     POSE_FACE = {'shock': 'emo:shock', 'hands_up': 'emo:shock', 'cheer': 'emo:joy', 'fist_pump_R': 'emo:joy', 'cower': 'emo:scared',
@@ -1604,7 +1615,11 @@ def build(spec, log):
                 together[id(b)] = wl[-1]
                 log.setdefault('notes', []).append(f"t{b['t']} {b['who']} walks with {x['who']}: stops beside them at {wl[-1][0]:.1f}, {wl[-1][1]:.1f}")
                 break
-            walk_to(ch, b['who'], wl, f, b, beats)
+            fe_ = walk_to(ch, b['who'], wl, f, b, beats)
+            if fe_ is not None:   # a long walk keys mid-stride over the character's next beat (contrast 'sit', which retimes its own approach)
+                nxt_ = next((x for x in beats if x is not b and x.get('who') == b['who'] and F(x['t'], fps) > f), None)
+                over_ = (fe_ - F(nxt_['t'], fps) + F(0.1, fps)) if nxt_ else fe_ - (n - 1)
+                if over_ > 0: n = retime_after(b, over_, 'walk')
         if 'sit' in b:   # sit on a named seat piece: route to its front, then locomotion.sit_down
             piece = next((q['pivot'] for q in assets.PLACED if q['name'] == b['sit']), None); ent = None
             if piece is None:   # 'chair' / 'bench' / 'sofa' -> the nearest piece whose name starts with that word
@@ -2150,6 +2165,7 @@ def build(spec, log):
                         if 'until' in g: g['until'] = round(g['until'] + (fg - f) / fps, 3)
                         n = retime_after(b, fg - f, f"grab {g['prop']}")
                     fu = F(g['until'], fps) if 'until' in g else n - 1
+                    fu = max(fu, fg + F(0.25, fps))   # 'until' earlier than the acquire frame (or pushed back by a retime) tripped gr.grab's assert
                     if fu >= n - 1 - F(0.5, fps): fu = END   # releasing in the last 0.5 s = keep holding (no mid-air prop at the end)
                     grabs.append((piv, side, pr, fg, fu))
                     settle[b['who']] = end
@@ -2197,7 +2213,7 @@ def build(spec, log):
     def key_gazes():
         tilts = {}
         for i, (ch, tgt, f, mv, track) in enumerate(gaze):
-            nxt = next((g[2] for g in gaze[i + 1:] if g[0] is ch), n - 1)
+            nxt = next((g[2] for g in gaze[i + 1:] if g[0] is ch and g[2] > f), max(n - 1, f + 1))   # two entries at the same frame sliced look_track empty
             sc.frame_set(f - mv); ch.head.keyframe_insert('rotation_euler', frame=f - mv)
             if tgt == '__forward__':
                 ch.head.rotation_euler = (0, 0, 0); ch.head.keyframe_insert('rotation_euler', frame=f); continue
@@ -2437,7 +2453,9 @@ def build(spec, log):
             tg = next(((bb['attack'].get('target') if isinstance(bb['attack'], dict) else bb.get('target'))
                        for bb in beats if bb['who'] == on_[0] and 'attack' in bb and f0 - 14 <= F(bb['t'], fps) <= f1 + 2), None)
             if tg in cast: s['on'] = on_ + [tg]
-        subj = [cast[x] if x in cast else target_of(x) for x in s.get('on', list(cast)[:1])]
+        on_ = [x for x in s.get('on', list(cast)[:1]) if x in cast or known_(x)]   # a typo'd name crashed target_of after cleanup
+        if not on_: on_ = list(cast)[:1]
+        subj = [cast[x] if x in cast else target_of(x) for x in on_]
         chs_ = [x for x in subj if hasattr(x, 'head_mesh')]
         if len(chs_) >= 2 and not s.get('keep_two'):   # too far apart for one 9:16 frame -> a single on the focus (editor's choice)
             sc.frame_set((f0 + f1) // 2)
