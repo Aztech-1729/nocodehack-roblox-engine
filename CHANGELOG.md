@@ -3,6 +3,16 @@
 Every fix to the NoCodeHack Roblox Engine, newest first: what you saw, why it happened, what changed, and how it was tested.
 Found a problem? Open an issue or comment on the video, it lands here.
 
+## 1.11.0 · 2026-11-15 · Claude now catches the same shot repeated
+
+**What you saw:** one character shown again and again in the same chest-up shot, so the Short felt like one long take.
+
+**What changed:** the story check warns when a character is the focus of three or more shots in a scene, all the same size, and
+suggests the fix: a close-up for the emotional beat, a full shot to re-place them in the room.
+
+**Tested:** the warning fires on exactly the test stories critic agents had called repetitive, and on none of the shipped
+examples.
+
 ## 1.10.1 · 2026-11-15 · Opening shots keep faces readable
 
 **What you saw:** after 1.9.0 some scenes opened on a very wide shot where the characters were tiny and their faces could not
