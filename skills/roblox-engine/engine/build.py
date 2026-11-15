@@ -1194,6 +1194,7 @@ def build(spec, log):
                     late = settle[el] - eta   # so the two never converge on a moving spot (R131 Max met walking Lia head-on)
                     f += late; eta += late
                     log.setdefault('notes', []).append(f"t{b['t']} {who} waits {late / fps:.1f}s for {el} to settle before walking up")
+                    log.setdefault('timeline_events', []).append({'kind': 'wait', 't': round(b['t'], 3), 'who': who, 'dl': round(late / fps, 3)})   # machine-readable twin (same ordered list as retimes)
                 sc.frame_set(eta); q = cast[el].root.matrix_world.translation.copy(); tyaw = cast[el].root.matrix_world.to_euler().z; sc.frame_set(f)
                 d = math.hypot(q.x - px, q.y - py)
                 # L1 CROWD: walking up to someone's SIDE, the last strides swing a hand into their hanging arm (3 studs: 7 cm for a
@@ -1438,6 +1439,7 @@ def build(spec, log):
             elif sh['t'] > b['t'] - 1e-6: sh['t'] = round(sh['t'] + max(0.0, dl - 0.6), 3)   # shot of the action: 0.6 s lead
         spec['seconds'] = round(spec['seconds'] + dl, 3); n_ = F(spec['seconds'], fps); sc.frame_end = n_ - 1
         log.setdefault('notes', []).append(f"t{b['t']} {b['who']} {why} retimed +{dl:.2f}s (approach)")
+        log.setdefault('timeline_events', []).append({'kind': 'retime', 't': round(b['t'], 3), 'who': b['who'], 'dl': round(dl, 3)})   # machine-readable twin of the note (tools/sound_mix.py replays this in order)
         return n_
 
     def safe_turn(ch_, f0_, yaw_, why, goal=None):
@@ -2746,15 +2748,20 @@ if __name__ == '__main__':
     bpy.ops.wm.save_as_mainfile(filepath=str(sdir / 'build' / 'scene.blend'))
     bad = gates(log); log['gates'] = bad or 'PASS'
     if tier != 'none':
-        if '--frames' in ARGS: fr = [int(x) for x in ARGS[ARGS.index('--frames') + 1:] if x.isdigit()]
-        elif '--range' in ARGS: a, b = int(arg('--range')), int(ARGS[ARGS.index('--range') + 2]); fr = range(a, b + 1)
+        if '--frames' in ARGS:
+            fr = [int(x) for x in ARGS[ARGS.index('--frames') + 1:] if x.isdigit()]
+            if not fr: raise SystemExit(f"--frames: no valid frame numbers in {' '.join(ARGS[ARGS.index('--frames') + 1:])} (form: --frames a-b)")
+        elif '--range' in ARGS:
+            i2 = ARGS.index('--range') + 2; a = int(arg('--range')); b = int(ARGS[i2]) if len(ARGS) > i2 and ARGS[i2].isdigit() else a
+            fr = range(a, b + 1)   # --range 5 (one value) means just frame 5
         else: fr = range(sc.frame_start, sc.frame_end + 1)
         sheet_only = bad and tier == 'draft' and '--full' not in ARGS and '--frames' not in ARGS and '--range' not in ARGS
         if sheet_only:   # failing draft: render just the 16 sheet frames (what gets reviewed); the full video waits for PASS
             n_ = sc.frame_end + 1; fr = [round(i * (n_ - 1) / 15) for i in range(16)]
         out = Path(arg('--out', str(sdir / 'out' / tier)))
         if '--frames' not in ARGS and '--range' not in ARGS and '--resume' not in ARGS and tier not in look.LOCAL and out.exists():
-            shutil.rmtree(out)   # fresh full render (no shell rm -rf: it can trigger a permission prompt overnight)
+            if out == sdir / 'out' / tier: shutil.rmtree(out)   # fresh full render (no shell rm -rf: it can trigger a permission prompt overnight)
+            else: [f_.unlink() for f_ in out.glob('*.png')]   # a custom --out is the user's directory: clear old frames only, never delete it
         k, dt = render(sc, tier, out, fr); log['render'] = {'frames': k, 's': round(dt, 1), 's_per_frame': round(dt / max(k, 1), 2)}
         if sheet_only:
             for i, f_ in enumerate(fr): shutil.copy2(out / f'{f_:04d}.png', out / f'sheet_{i:02d}.png')
@@ -2778,7 +2785,9 @@ if __name__ == '__main__':
         if src.exists(): shutil.copy2(src, tdir / f'{tag}_sheet.jpg')
     if '--frames' in ARGS:
         try:
-            subprocess.run([sys.executable if False else 'python', str(Path(__file__).resolve().parent / 'tools' / 'stills_sheet.py'), str(out), str(tdir / f'{tag}_stills.jpg')], check=False)
+            py_ = os.environ.get('PYTHON') or shutil.which('python') or shutil.which('python3')   # sys.executable here is blender.exe, not python
+            if py_: subprocess.run([py_, str(Path(__file__).resolve().parent / 'tools' / 'stills_sheet.py'), str(out), str(tdir / f'{tag}_stills.jpg')], check=False)
+            else: print('trace stills skipped: no system python on PATH (set PYTHON=...)')
         except Exception as e: print('trace stills failed', e)
     shutil.copy2(sdir / 'report.json', tdir / f'{tag}_report.json'); shutil.copy2(jpath, tdir / f'{tag}_short.json')
     w = log.get('walks', [])
