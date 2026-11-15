@@ -3,6 +3,18 @@
 Every fix to the NoCodeHack Roblox Engine, newest first: what you saw, why it happened, what changed, and how it was tested.
 Found a problem? Open an issue or comment on the video, it lands here.
 
+## 1.4.2 · 2026-11-15 · Lessons from a fresh test run
+
+A brand-new Claude, with only this skill, made a Short ("a girl hides her new puppy from her mom"). Gates passed first
+time and the camera had real variety. It also hit five rough spots, now covered in the skill:
+- **Back of a head:** turning the character to the camera first, then `front: true`. `front` alone on someone walking away
+  failed the face check.
+- **Animals:** the engine has no animal models. Claude now tells you and writes around it (the pet hidden in a box, heard
+  but not seen, or a toy) instead of passing a random prop off as a puppy.
+- **Draft sheet after partial rebuilds:** one full draft before judging the whole sheet; a fix that breaks a check is undone.
+- **Fringe hairs that cover the eyes** are listed, so Claude swaps them when faces disappear.
+- **Entrances:** start in a doorway or at the room edge, then walk in.
+
 ## 1.4.1 · 2026-11-15 · "Washed-out" drafts explained
 
 **What you saw:** in the draft, night close-ups looked blown out: grey hair, pale faces.

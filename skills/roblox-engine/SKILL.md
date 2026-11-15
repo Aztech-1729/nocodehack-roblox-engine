@@ -80,6 +80,9 @@ The camera cuts on actions: a story with few beats gets few shots. Before step 2
   an extreme close-up on the strongest one), a physical gag (fall, jump, run, knockback) when the idea allows it.
 - Shots: the first shot at t 0 on a character, `on` = characters only (a prop in `on` fails the face gate; the engine finds
   the prop itself). Mix sizes: wide/full for blocking, medium for talk, close for the punchline face.
+- No animals: the engine has none (no pet, dog or cat model). Tell the user in one line and write around it (the pet stays
+  hidden in a box/bag, heard not seen, or is a toy prop); never pass a random prop off as an animal.
+- Entrances: start the character at the room edge or in a doorway (positions outside the room are pulled inside), then walk.
 - Faces: change `face` on every emotional turn; 4-6 different faces per character in a 30 s Short.
 - Colour: shirts must contrast with the yellow Roblox skin (no yellow/orange shirts on yellow skin); night/spooky scenes keep
   hair and clothes light enough to read (no near-black clothes at night), or use `mood` `cool`/`default`.
@@ -93,9 +96,12 @@ that scene with `--only N --tier draft`:
 | faces hidden under hair from above | scene key `"pitch": false` |
 | a character is a dark silhouette | lighter shirt/hair colour, or scene `mood` `default`/`warm` |
 | the same shot for 4+ frames | more beats (reactions, a look, a gesture) in that stretch |
-| back of a head instead of a face | `front: true` on the shot, or turn the character (`turn`) toward the camera |
+| back of a head instead of a face | turn the character toward the camera first (`turn`, or face front and hold ~1 s before walking away), then `front: true` on the shot. `front` alone on a character walking away fails the face gate |
 | a prop nobody can see | a `look` or `grab` beat on it (insert close-up) |
+| eyes hidden by a fringe | another hair (fringe hairs: ponytail1, ponytail2, fluffy_fringe1, spiky_messy2, wavy3, messy_bun1) |
 | a fight filmed from behind | `profile: true` + `keep_two: true` |
+A fix that makes a gate FAIL: undo it and try the next fix for that frame. `draft_sheet.jpg` is rebuilt from the scene videos on disk,
+so after `--only N` rounds run one full `--tier draft` before judging the whole sheet.
 Stop when a round finds nothing new. Tell the user in one line what you fixed.
 The draft's light and colours are a fast approximation (night close-ups look washed out, hair can look grey). Never judge
 light from the draft: render one real frame of the scene in question first (about 1 minute):
