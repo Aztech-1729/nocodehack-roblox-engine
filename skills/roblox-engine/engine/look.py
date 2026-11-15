@@ -678,11 +678,11 @@ def frame_size(sc):
 def upscale(out, up, size=(1080, 1920)):
     """-> (frames dir, ffmpeg -vf args) for the 1080x1920 video: ENGINE_UPSCALE=realesrgan + the exe present -> Real-ESRGAN x2 frames
     in <up>; otherwise Lanczos in ffmpeg (the farm's upscale)."""
-    import subprocess
+    import shutil, subprocess
     from pathlib import Path
     if os.environ.get('ENGINE_UPSCALE') == 'realesrgan' and os.path.exists(RESR):
-        Path(up).mkdir(parents=True, exist_ok=True)
         shutil.rmtree(up, ignore_errors=True)   # a shorter re-render must not leave stale higher-numbered frames behind
+        Path(up).mkdir(parents=True, exist_ok=True)   # ... and the upscaler needs the folder to exist
         r = subprocess.run([RESR, '-i', str(out), '-o', str(up), '-n', 'realesr-animevideov3', '-s', '2', '-f', 'png'], capture_output=True, text=True)
         if r.returncode == 0: return Path(up), ['-vf', f'scale={size[0]}:{size[1]}:flags=lanczos']   # x2 is already 1080x1920; the scale is a guard
         print('WARNING Real-ESRGAN failed, Lanczos instead:', r.stderr[-300:], flush=True)

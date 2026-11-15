@@ -401,7 +401,7 @@ def exterior(sp):
         # R-look2 sandstone: the kit's peach 'dirt' + teal 'grass' caps rendered as a dark saturated orange wall behind every
         # character; pale warm beige rock with a darker tan strata cap (teal stays only on the cacti)
         for m in {m for o in bpy.data.objects if o.type == 'MESH' for m in o.data.materials if m and m.use_nodes}:
-            col = (.92, .73, .55) if m.name.startswith('dirt') else ((.60, .41, .27) if m.name.startswith('grass') else None)   # sunlit peach-tan + darker warm strata; everything else keeps its colour
+            col = (.92, .73, .55) if m.name.startswith('dirt') else (.60, .41, .27)   # sunlit peach-tan + darker warm strata if m.name.startswith('grass') else None
             bs = m.node_tree.nodes.get('Principled BSDF')
             if col and bs: bs.inputs['Base Color'].default_value = (*col, 1); m.diffuse_color = (*col, 1)
     elif sp.get('city'):   # downtown: wide sidewalk, road, shop fronts close behind, skyscrapers behind them, traffic, street lights

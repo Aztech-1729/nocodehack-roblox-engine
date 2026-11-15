@@ -34,7 +34,7 @@ def word_cards(text, t0, dur, style='Word'):
     ws = text.split(); wt = [len(w.strip('*')) + 2 for w in ws]; out, t = [], t0
     for w, k in zip(ws, wt):
         d = dur * k / sum(wt); key = w.startswith('*') and w.endswith('*') and len(w) > 2
-        w = w.strip('*').upper(); out.append([t, t + d, f'{{\c{KEY}}}{w}' if key else w]); t += d
+        w = w.strip('*').upper(); out.append([t, t + d, rf'{{\c{KEY}}}{w}' if key else w]); t += d
     return out
 
 

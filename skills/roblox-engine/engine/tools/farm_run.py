@@ -187,7 +187,9 @@ def gs(*a, check=True):
 
 def gs_ls(prefix):
     r = run([GSUTIL, 'ls', prefix], check=False, timeout=120)
-    if r.returncode != 0: raise SystemExit(f'gsutil ls {prefix} failed (rc {r.returncode}): {r.stderr[-200:]}')   # a transient failure must not read as "all frames missing"
+    if r.returncode != 0:
+        if 'matched no objects' in (r.stderr or '') or 'One or more URLs matched no objects' in (r.stderr or ''): return []   # nothing rendered yet: a fresh run
+        raise SystemExit(f'gsutil ls {prefix} failed (rc {r.returncode}): {r.stderr[-200:]}')   # a transient failure must not read as "all frames missing"
     return r.stdout.split()
 
 

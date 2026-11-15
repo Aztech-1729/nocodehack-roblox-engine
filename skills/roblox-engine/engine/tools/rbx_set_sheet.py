@@ -1,10 +1,10 @@
 """rbx_set_sheet.py - evidence sheet for the imported Roblox sets: per set a Cycles look still (9:16 medium-wide, one standing R6 character
 for scale) next to the Studio thumbnail. Plain python:  python tools/rbx_set_sheet.py [tag ...]  -> assets/rbxsets/sheet.jpg + <set>/preview.jpg
 Blender worker (one set):  blender -b --factory-startup --offline-mode -P tools/rbx_set_sheet.py -- <set dir>"""
-import json, math, os, subprocess, sys
+import json, math, subprocess, sys
 from pathlib import Path
 E = Path(__file__).resolve().parents[1]
-BL = os.environ.get('BLENDER', 'C:/Program Files/Blender Foundation/Blender 5.2/blender.exe')   # same override story.py honors
+BL = 'C:/Program Files/Blender Foundation/Blender 5.2/blender.exe'
 
 
 def worker(sdir):
@@ -26,7 +26,7 @@ def worker(sdir):
         if spot: break
     spot = spot or (cx, y0 + .3 * D)
     for q in assets.PLACED:   # the sheet camera stands inside the front wall: hide whatever is a thin wall right there
-        if q['rect'][3] < y0 + 1.0 or q['rect'][1] < x0 + 1.0:
+        if q['rect'][3] < y0 + 1.0 or q['rect'][1] < x0 + 1.0 and False:
             for o in q['pivot'].children_recursive: o.hide_render = True
     ch = rig.make('Max', (spot[0] / S, spot[1] / S), 0)
     cam = bpy.data.objects.new('cam', bpy.data.cameras.new('cam')); sc.collection.objects.link(cam); sc.camera = cam
