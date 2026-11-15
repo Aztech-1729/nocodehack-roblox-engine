@@ -149,6 +149,50 @@ class Lib:
         return any(s == stem or s.startswith(stem) or stem in s for s in fs)
 
 
+# ---------------------------------------------------------------- casting
+def _shirt_rgb(c):
+    """Main shirt colour of a cast entry: the `shirt` hex, or the mean of a library shirt template's opaque pixels."""
+    o = c.get('outfit') or {}
+    if isinstance(o, dict) and o.get('shirt'):
+        try:
+            import numpy as np
+            from PIL import Image
+            k = str(o['shirt']).split(':', 1)[-1].lower(); ms = []
+            for m in sorted(glob.glob(str(A / 'outfits' / '*_*' / 'meta.json')), key=lambda p: int(Path(p).parent.name.split('_')[0])):
+                j = json.loads(Path(m).read_text(encoding='utf-8'))
+                if j['kind'] == 'shirt': ms.append((Path(m).parent, j))
+            hit = [d for d, j in ms if str(j['id']) == k]
+            if not hit:
+                mm = re.fullmatch(r'(.*?)(\d*)', k); tg, n = mm.group(1), int(mm.group(2) or 1)
+                tagged = [d for d, j in ms if tg in j.get('tags', [])]; hit = tagged[n - 1:n]
+            im = Image.open(hit[0] / 'template.png').convert('RGBA')
+            sx, sy = im.size[0] / 585, im.size[1] / 559   # Roblox shirt template: torso FRONT = x 231-359, y 74-202 (585x559)
+            a = np.asarray(im.crop((int(231 * sx), int(74 * sy), int(359 * sx), int(202 * sy))), dtype=float)
+            a = a[a[..., 3] > 128][:, :3]
+            return tuple(a.mean(axis=0)) if len(a) else None
+        except Exception: return None
+    s = str(c.get('shirt', ''))
+    return tuple(int(s[i:i + 2], 16) for i in (1, 3, 5)) if re.fullmatch(r'#[0-9A-Fa-f]{6}', s) else None
+
+
+def lookalike(R, looks):
+    """Two characters the viewer cannot tell apart (no names on screen): same library hair, or shirts of nearly the same
+    colour (both near-black counts). trace/20261115-0735: both leads in near-black hoodies, the girl read as a boy."""
+    cs = list(looks.values())
+    for i in range(len(cs)):
+        for j in range(i + 1, len(cs)):
+            a, b = cs[i], cs[j]
+            ha, hb = str(a.get('hair_style', '')), str(b.get('hair_style', ''))
+            if ha.startswith('lib:') and ha == hb:
+                R.warn('cast', 'hair_style', f"{a['name']} and {b['name']} both wear {ha}: give one of them another hair so they read apart")
+            ra, rb = _shirt_rgb(a), _shirt_rgb(b)
+            if ra and rb:
+                d = sum((x - y) ** 2 for x, y in zip(ra, rb)) ** 0.5; dark = max(ra) < 70 and max(rb) < 70
+                same_head = ha == hb   # a shared uniform is fine when the heads differ (Goku / Krillin gi); two dark shirts never are
+                if dark or (d < 60 and same_head):
+                    R.warn('cast', 'shirt', f"{a['name']} and {b['name']} wear shirts of nearly the same colour{' (both near-black)' if dark else ''}: change one so they read apart")
+
+
 # ---------------------------------------------------------------- helpers
 def near(x, pool):
     m = difflib.get_close_matches(str(x), sorted(map(str, pool)), 1, 0.6)
@@ -251,6 +295,7 @@ def lint(story_path):
         if c['name'] in looks: R.err(w, 'name', f"'{c['name']}' is listed twice -> one entry per character")
         looks[c['name']] = c; unknown(R, w, c, LOOKS, 'cast')
         check_looks(R, L, w, c)
+    lookalike(R, looks)
     total = 0.0; nsc = len(S.get('scenes', []))
     for si, sc in enumerate(S.get('scenes', [])):
         if not isinstance(sc, dict): R.err(f's{si + 1:02d}', 'scene', 'must be an object'); continue

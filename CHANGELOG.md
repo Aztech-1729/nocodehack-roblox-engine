@@ -3,6 +3,21 @@
 Every fix to the NoCodeHack Roblox Engine, newest first: what you saw, why it happened, what changed, and how it was tested.
 Found a problem? Open an issue or comment on the video, it lands here.
 
+## 1.6.0 · 2026-11-15 · Claude now catches characters that look alike
+
+**What you saw:** two characters you could not tell apart: both in near-black clothes (dark twins on screen), or the same
+hair on both.
+
+**Why:** a Short has no name tags, so the viewer tells characters apart only by hair and clothes. Nothing checked that.
+
+**What changed:** the story check (`story_lint`) now warns before anything renders when two characters wear the same
+library hair, or shirts of nearly the same colour with the same hair, or are both dressed in near-black. For library
+outfits it reads the actual front-of-torso colour of the Roblox shirt. Matching uniforms are fine when the heads differ
+(Goku and Krillin's orange gi still pass).
+
+**Tested:** 17 test and example stories: exactly one warning, on the test story whose leads were both in black; no false
+alarms on any shipped example.
+
 ## 1.5.0 · 2026-11-15 · The engine now tells Claude which shots read badly
 
 **What you saw:** shots where a character's eyes were hidden under their fringe, a head cut off at the top, or the back of a
