@@ -81,8 +81,9 @@ The camera cuts on actions: a story with few beats gets few shots. Before step 2
   an extreme close-up on the strongest one), a physical gag (fall, jump, run, knockback) when the idea allows it.
 - Shots: the first shot at t 0 on a character, `on` = characters only (a prop in `on` fails the face gate; the engine finds
   the prop itself). Mix sizes: wide/full for blocking, medium for talk, close for the punchline face.
-- No animals: the engine has none (no pet, dog or cat model). Tell the user in one line and write around it (the pet stays
-  hidden in a box/bag, heard not seen, or is a toy prop); never pass a random prop off as an animal.
+- No animals: the engine has none (no pet, dog or cat model). Tell the user in one line and write around it: the pet stays
+  hidden in a box on the floor that jolts (props `shake: [seconds]`) with a reaction cut to whoever sees it, heard not seen, or
+  a toy prop; never pass a random prop off as an animal.
 - Entrances: start the character at the room edge or in a doorway (positions outside the room are pulled inside), then walk.
 - Faces: change `face` on every emotional turn; 4-6 different faces per character in a 30 s Short.
 - Colour: shirts must contrast with the yellow Roblox skin (no yellow/orange shirts on yellow skin); night/spooky scenes keep

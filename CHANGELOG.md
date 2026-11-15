@@ -3,6 +3,20 @@
 Every fix to the NoCodeHack Roblox Engine, newest first: what you saw, why it happened, what changed, and how it was tested.
 Found a problem? Open an issue or comment on the video, it lands here.
 
+## 1.10.0 · 2026-11-15 · Props can shake: a hidden pet you can actually "see"
+
+**What you saw:** stories about a hidden pet where nothing showed the pet: the engine has no animal models, so the box just
+sat there and the story did not read.
+
+**What changed:** props get a `shake` key: a list of seconds where the prop jolts for half a second (hops and twists, then
+settles exactly where it was). A box with a puppy inside, a buzzing phone, a rattling cupboard. The skill now writes hidden
+animals this way: the box on the floor shakes, an insert shows it, then the character reacts. (It is skipped on props a
+character is holding, so it never fights the hands.)
+
+**Tested:** a test scene shows the box still, then jolting twice, then back at rest; normal stories build exactly as before.
+
+<img src="docs/img/changelog/1.10.0_shake.jpg" width="800">
+
 ## 1.9.0 · 2026-11-15 · Every scene now shows where we are
 
 **What you saw:** Shorts made almost only of chest-up shots: you never saw the room or who stands where.

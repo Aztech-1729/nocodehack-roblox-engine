@@ -13,7 +13,9 @@ classic film-craft books (shot grammar, visual structure, animation timing); tes
    stands where; then go closer. (Never switch off the engine's establishing shot to avoid a wide.)
    **Shot size follows pressure, not the clock.** `wide`/`full` to show where we are and who stands where, `medium` for talk,
    `close` when it becomes personal, the closest framing at the climax. Do not start close and stay close.
-4. **Plant before payoff.** A prop, clue or person that pays off later gets a `look` beat on it earlier (the engine adds an
+4. **Things the engine cannot show (an animal, a ghost) live inside a prop that reacts:** a box on the floor that `shake`s at
+   the key moments, an insert on it, then the character's reaction. The viewer reads the hidden thing through the box.
+   **Plant before payoff.** A prop, clue or person that pays off later gets a `look` beat on it earlier (the engine adds an
    insert close-up). Never reveal something the viewer was never shown.
 5. **Colour and light carry meaning.** Leads wear clearly different shirt colours (not yellow: the skin is yellow). Give each
    scene one `mood`; the climax scene gets the strongest change (`dramatic`, `sunset`, `night`) - faces must stay readable.

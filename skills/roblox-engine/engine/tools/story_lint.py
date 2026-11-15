@@ -19,7 +19,7 @@ SET = {'preset', 'size', 'height', 'wall', 'trim', 'floor', 'floor_color', 'door
        'ceiling_lamps', 'seed', 'time', 'mood', 'outdoor', 'park', 'dress', 'rbx', 'at', 'rot', 'scale', 'ground', 'board', 'notes', 'desks'}
 LOOKS = {'name', 'shirt', 'pants', 'skin', 'hair', 'hair_style', 'face', 'face_family', 'face_marks', 'outfit'}
 SCAST = LOOKS | {'at', 'yaw'}
-PROP = {'name', 'kind', 'on', 'at', 'z', 'rot', 'held_by', 'hand', 'until'}
+PROP = {'name', 'kind', 'on', 'at', 'z', 'rot', 'held_by', 'hand', 'until', 'shake'}
 BEAT = {'t', 'who', 'walk', 'speed', 'run', 'stride', 'hand', 'sit', 'stand', 'fall', 'get_up', 'give', 'throw', 'turn', 'pose', 'jump',
         'wiggle', 'wiggle_s', 'anim', 'loop', 'anim_speed', 'anim_skip', 'face', 'talk', 'gesture', 'look', 'track', 'grab', 'move',
         'attack', 'block', 'dodge', 'knockback', 'down', 'fly', 'land', 'power_up', 'aura', 'aura_color', 'beam', 'exclaim', 'transform',
