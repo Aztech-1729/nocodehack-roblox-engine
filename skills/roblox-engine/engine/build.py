@@ -2188,7 +2188,9 @@ def build(spec, log):
             if busy_ or any(g_[0] is lch and ft0 - 12 <= g_[2] <= ft1 for g_ in gaze): continue
             sc.frame_set(ft0 + 3); e_ = lch.root.matrix_world.to_euler()
             if abs(e_.x) > 0.3 or abs(e_.y) > 0.3: continue   # LYING (after a fall/knockback): no head turn into the floor (school s02 Zed, R180)
-            gaze.append((lch, tb['who'], ft0 + 3, 6, False))
+            # REACT LATE (ANIMATORS_SURVIVAL_KIT_RULES timing 9 / DIRECTING 18): the head turn used to START 3 frames BEFORE the first
+            # word (listeners read minds); now it starts 0.1 s after the line begins and lands at ~0.35 s
+            gaze.append((lch, tb['who'], ft0 + F(0.1, fps) + 6, 6, False))
     gaze.sort(key=lambda g: g[2])
     def key_gazes():
         tilts = {}

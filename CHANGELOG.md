@@ -3,6 +3,18 @@
 Every fix to the NoCodeHack Roblox Engine, newest first: what you saw, why it happened, what changed, and how it was tested.
 Found a problem? Open an issue or comment on the video, it lands here.
 
+## 1.7.1 · 2026-11-15 · Listeners react after the line starts, not before
+
+**What you saw:** in conversations, the listening character turned to the speaker a moment *before* the speaker said
+anything, as if they could read minds. Small, but it makes acting feel mechanical.
+
+**Why:** the automatic "listener looks at the speaker" turn was timed to land exactly on the first word, so it started early.
+
+**What changed:** the listener's head turn now starts 0.1 s after the line begins and lands at about 0.35 s, the short
+thinking delay animators use for a natural reaction. Most visible in two-character shots and reaction cuts.
+
+**Tested:** 7 test stories: all checks pass, and shots and framing are unchanged. Only the reaction timing moved.
+
 ## 1.7.0 · 2026-11-15 · A directing guide: structure, camera and acting timing
 
 **What you saw:** stories that were flat: no build-up, stiff reactions, characters that are hard to tell apart, shots that
