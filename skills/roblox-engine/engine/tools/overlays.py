@@ -20,12 +20,12 @@ def ts(t): return f'{int(t // 3600)}:{int(t % 3600 // 60):02d}:{t % 60:05.2f}'
 
 def box(t0, t1, alpha, layer=1, y0=0, h=1920):
     """Full-width rectangle (alpha '00' opaque .. 'FF' clear) as an ASS drawing."""
-    return (f"Dialogue: {layer},{ts(t0)},{ts(t1)},Card,,0,0,0,,{{\an7\pos(0,{y0})\p1\1c&H000000&\1a&H{alpha}&\bord0\shad0}}"
-            f"m 0 0 l 1080 0 1080 {h} 0 {h}{{\p0}}")
+    return (rf"Dialogue: {layer},{ts(t0)},{ts(t1)},Card,,0,0,0,,{{\an7\pos(0,{y0})\p1\1c&H000000&\1a&H{alpha}&\bord0\shad0}}"
+            rf"m 0 0 l 1080 0 1080 {h} 0 {h}{{\p0}}")
 
 
 def txt(t0, t1, style, text, pos=None, layer=2, fx=''):
-    p = (f"\an{7 if style == 'Tag' else 5}\pos({pos[0]},{pos[1]})" if pos else '')
+    p = (rf"\an{7 if style == 'Tag' else 5}\pos({pos[0]},{pos[1]})" if pos else '')
     return f"Dialogue: {layer},{ts(t0)},{ts(t1)},{style},,0,0,0,,{{{p}{fx}}}{text}"
 
 
@@ -49,11 +49,11 @@ def extra_events(story, offs, freezes):
         elif ty == 'time': ev += [box(a, b, '80', 1), txt(a, b, 'Card', text, (540, 960))]
         elif ty == 'counter': ev.append(txt(a, b, 'Counter', text))
         elif ty == 'choice':
-            ev += [box(a, b, '40', 1, 1500, 300), txt(a, b, 'Card', '1', (270, 1650), fx='\fs100'), txt(a, b, 'Card', '2', (810, 1650), fx='\fs100'),
+            ev += [box(a, b, '40', 1, 1500, 300), txt(a, b, 'Card', '1', (270, 1650), fx=r'\fs100'), txt(a, b, 'Card', '2', (810, 1650), fx=r'\fs100'),
                    txt(a, b, 'Tag', str(c.get('a', '')).upper(), (270, 1560)), txt(a, b, 'Tag', str(c.get('b', '')).upper(), (810, 1560))]
         else: ev.append(txt(a, b, 'Tag', f' {text} ', (60, 330 if c.get('pos', 'top') == 'top' else 1290), fx=''))
     for t, d, label in freezes:
-        if label: ev.append(txt(t, t + d, 'Card', label.upper(), (540, 800), fx='\fs120'))
+        if label: ev.append(txt(t, t + d, 'Card', label.upper(), (540, 800), fx=r'\fs120'))
     return ev
 
 
