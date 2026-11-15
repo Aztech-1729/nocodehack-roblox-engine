@@ -30,6 +30,8 @@ def main():
     if lr.errors and '--no-lint' not in sys.argv: sys.exit('lint errors: fix them, or run with --no-lint to build anyway')
     story = json.loads(sp.read_text(encoding='utf-8')); d = sp.parent
     tier = sys.argv[sys.argv.index('--tier') + 1] if '--tier' in sys.argv else 'draft'
+    if tier != 'none' and not (shutil.which('ffmpeg') and shutil.which('ffprobe')):
+        sys.exit('ffmpeg/ffprobe are not on PATH (https://ffmpeg.org/download.html) - the scene videos are joined after the render, so this fails now instead of after the render')
     only = int(sys.argv[sys.argv.index('--only') + 1]) if '--only' in sys.argv else None
     looks = {c['name']: c for c in story['cast']}
     jobs = int(sys.argv[sys.argv.index('--jobs') + 1]) if '--jobs' in sys.argv else 3   # scenes build in parallel (24 cores)
@@ -42,6 +44,8 @@ def main():
     fmap = acting.story_face_map(story, fams, acting.load_lib())   # ONE decal per (character, emotion) for the whole Short
     for k, sc in enumerate(scenes, 1):
         sd = d / 'scenes' / f's{k:02d}'; sd.mkdir(parents=True, exist_ok=True)
+        miss = sorted({c['name'] for c in sc['cast']} - set(looks))
+        if miss: sys.exit(f"scene {k}: cast name(s) {miss} are not in the story 'cast' - add them there or fix the spelling (story_lint catches this too; it crashed here before)")
         cast = [{'face_family': fams.get(c['name']), 'face_map': fmap.get(c['name'], {}), **looks[c['name']], **c} for c in sc['cast']]
         spec = {'title': f"{story['title']} s{k:02d}", 'fps': story.get('fps', 24), 'auto_acting': story.get('auto_acting', True), **({'camera': story['camera']} if 'camera' in story else {}), **({'frame': story['frame']} if 'frame' in story else {}), **({'strict_crowd': True} if story.get('strict_crowd') else {}), **{x: v for x, v in sc.items() if x != 'cast'}, 'cast': cast}
         spec['set'] = {'seed': seed, **spec.get('set', {'preset': 'classroom'})}
