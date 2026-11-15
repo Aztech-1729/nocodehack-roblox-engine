@@ -3,6 +3,75 @@
 Every fix to the NoCodeHack Roblox Engine, newest first: what you saw, why it happened, what changed, and how it was tested.
 Found a problem? Open an issue or comment on the video, it lands here.
 
+## 1.11.0 · 2026-11-15 · Claude now catches the same shot repeated
+
+**What you saw:** one character shown again and again in the same chest-up shot, so the Short felt like one long take.
+
+**What changed:** the story check warns when a character is the focus of three or more shots in a scene, all the same size, and
+suggests the fix: a close-up for the emotional beat, a full shot to re-place them in the room.
+
+**Tested:** the warning fires on exactly the test stories critic agents had called repetitive, and on none of the shipped
+examples.
+
+## 1.10.1 · 2026-11-15 · Opening shots keep faces readable
+
+**What you saw:** after 1.9.0 some scenes opened on a very wide shot where the characters were tiny and their faces could not
+be read on a phone.
+
+**What changed:** the directing guide now opens a scene with one or two characters on a `full` shot; `wide` is kept for three
+or more people or a big action (a chase, a fall).
+
+**Tested:** the same idea written by a fresh AI agent with the previous and the new guide (also using the new box shake), judged
+by two critic agents next to two reference Shorts: camera 3 -> 4, story 2 -> 3.5. The new story had zero framing problems.
+
+## 1.10.0 · 2026-11-15 · Props can shake: a hidden pet you can actually "see"
+
+**What you saw:** stories about a hidden pet where nothing showed the pet: the engine has no animal models, so the box just
+sat there and the story did not read.
+
+**What changed:** props get a `shake` key: a list of seconds where the prop jolts for half a second (hops and twists, then
+settles exactly where it was). A box with a puppy inside, a buzzing phone, a rattling cupboard. The skill now writes hidden
+animals this way: the box on the floor shakes, an insert shows it, then the character reacts. (It is skipped on props a
+character is holding, so it never fights the hands.)
+
+**Tested:** a test scene shows the box still, then jolting twice, then back at rest; normal stories build exactly as before.
+
+<img src="docs/img/changelog/1.10.0_shake.jpg" width="800">
+
+## 1.9.0 · 2026-11-15 · Every scene now shows where we are
+
+**What you saw:** Shorts made almost only of chest-up shots: you never saw the room or who stands where.
+
+**Why:** the skill's own fix table told Claude to switch off the engine's establishing shot and open on a medium whenever a
+head was cropped, and to switch off the automatic camera angles in every scene.
+
+**What changed:**
+- The directing guide: every new location opens with a ~1 s `full` or `wide` that shows the room and who stands where.
+- The fix table: a cropped head now means *that shot one size wider*; the establishing shot is switched off only for a
+  scene that continues in the same place; the automatic high/low angles are switched off only in the scene where faces
+  are hidden.
+
+**Tested:** the same story idea written by a fresh AI agent before and after, judged by two critic agents next to two
+reference Shorts: camera 3 -> 4, story 3 -> 3.5. Both picked the new version (room established, more shot types).
+
+| Before | After |
+|---|---|
+| <img src="docs/img/changelog/1.9.0_before.jpg" width="400"> | <img src="docs/img/changelog/1.9.0_after.jpg" width="400"> |
+
+## 1.8.0 · 2026-11-15 · The engine now spots arms blocking the shot
+
+**What you saw:** shots where a gesturing arm or shoulder covered a big part of the frame, and nothing warned about it.
+
+**Why:** the engine's body check counted the character's own torso too, so almost every medium shot scored the same and real
+arm slabs did not stand out.
+
+**What changed:** a new measurement counts only arms, legs and other characters in front of the camera (never the subject's
+own torso). When it is high, the `LOOK` line says `arm across the frame`, and the skill's fix table tells Claude what to do:
+a calmer pose, `gesture: false` on that line, or turning the character side-on. Information only: it never changes a render.
+
+**Tested:** on 72 shots the four highest scores were exactly the arm-slab shots a critic had pointed out; on 5 test stories
+all checks pass and the framing is unchanged.
+
 ## 1.7.1 · 2026-11-15 · Listeners react after the line starts, not before
 
 **What you saw:** in conversations, the listening character turned to the speaker a moment *before* the speaker said

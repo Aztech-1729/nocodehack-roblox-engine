@@ -81,8 +81,9 @@ The camera cuts on actions: a story with few beats gets few shots. Before step 2
   an extreme close-up on the strongest one), a physical gag (fall, jump, run, knockback) when the idea allows it.
 - Shots: the first shot at t 0 on a character, `on` = characters only (a prop in `on` fails the face gate; the engine finds
   the prop itself). Mix sizes: wide/full for blocking, medium for talk, close for the punchline face.
-- No animals: the engine has none (no pet, dog or cat model). Tell the user in one line and write around it (the pet stays
-  hidden in a box/bag, heard not seen, or is a toy prop); never pass a random prop off as an animal.
+- No animals: the engine has none (no pet, dog or cat model). Tell the user in one line and write around it: the pet stays
+  hidden in a box on the floor that jolts (props `shake: [seconds]`) with a reaction cut to whoever sees it, heard not seen, or
+  a toy prop; never pass a random prop off as an animal.
 - Entrances: start the character at the room edge or in a doorway (positions outside the room are pulled inside), then walk.
 - Faces: change `face` on every emotional turn; 4-6 different faces per character in a 30 s Short.
 - Colour: shirts must contrast with the yellow Roblox skin (no yellow/orange shirts on yellow skin); night/spooky scenes keep
@@ -94,11 +95,12 @@ and open `draft_sheet.jpg`; write down every shot that has one of these problems
 that scene with `--only N --tier draft`:
 | You see | Fix |
 |---|---|
-| `head cropped` (LOOK), opening frame cuts a body in half, or a tiny-people wide | scene key `"establish": false`, first shot `medium` on the hero |
-| faces hidden under hair from above | scene key `"pitch": false` |
+| `head cropped` (LOOK) or a body cut in half | that shot one size wider (`close` -> `medium`, `medium` -> `full`). `"establish": false` only for a scene that continues straight on from the previous one in the same place |
+| faces hidden under hair from above (`eyes hidden` on a `high` shot) | scene key `"pitch": false` in THAT scene only (the automatic low/high angles give the Short its variety) |
 | a character is a dark silhouette | lighter shirt/hair colour, or scene `mood` `default`/`warm` |
 | the same shot for 4+ frames | more beats (reactions, a look, a gesture) in that stretch |
 | `back of a head` / `face turned away` (LOOK) | turn the character toward the camera first (`turn`, or face front and hold ~1 s before walking away), then `front: true` on the shot. `front` alone on a character walking away fails the face gate |
+| `arm across the frame` / `limb fills the frame` (LOOK) | the arm belongs to a gesture: `gesture: false` on that line, a calmer `pose`, or turn that character side-on to the lens (`turn`). The camera cannot avoid it |
 | a prop nobody can see | a `look` or `grab` beat on it (insert close-up) |
 | `eyes hidden` (LOOK) / eyes hidden by a fringe | another hair (fringe hairs: ponytail1, ponytail2, fluffy_fringe1, spiky_messy2, wavy3, messy_bun1) |
 | a fight filmed from behind | `profile: true` + `keep_two: true` |

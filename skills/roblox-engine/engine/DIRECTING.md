@@ -9,9 +9,14 @@ classic film-craft books (shot grammar, visual structure, animation timing); tes
    per scene in your plan: what the viewer should feel, and how much (1-5). The climax scene must be the highest.
 2. **One beat = one readable event.** Every 1-1.5 s the viewer should see ONE action, reaction or reveal, with one clear
    subject. Two things at once: split them into two beats.
-3. **Shot size follows pressure, not the clock.** `wide`/`full` to show where we are and who stands where, `medium` for talk,
+3. **Show the place first.** Every new location opens with a `full` or `wide` shot of about 1 s that shows the room and who
+   stands where; then go closer. With one or two characters use `full` (faces stay readable on a phone); `wide` is for three
+   or more people or a big action (a chase, a fall). (Never switch off the engine's establishing shot to avoid a wide.)
+   **Shot size follows pressure, not the clock.** `wide`/`full` to show where we are and who stands where, `medium` for talk,
    `close` when it becomes personal, the closest framing at the climax. Do not start close and stay close.
-4. **Plant before payoff.** A prop, clue or person that pays off later gets a `look` beat on it earlier (the engine adds an
+4. **Things the engine cannot show (an animal, a ghost) live inside a prop that reacts:** a box on the floor that `shake`s at
+   the key moments, an insert on it, then the character's reaction. The viewer reads the hidden thing through the box.
+   **Plant before payoff.** A prop, clue or person that pays off later gets a `look` beat on it earlier (the engine adds an
    insert close-up). Never reveal something the viewer was never shown.
 5. **Colour and light carry meaning.** Leads wear clearly different shirt colours (not yellow: the skin is yellow). Give each
    scene one `mood`; the climax scene gets the strongest change (`dramatic`, `sunset`, `night`) - faces must stay readable.

@@ -19,7 +19,7 @@ SET = {'preset', 'size', 'height', 'wall', 'trim', 'floor', 'floor_color', 'door
        'ceiling_lamps', 'seed', 'time', 'mood', 'outdoor', 'park', 'dress', 'rbx', 'at', 'rot', 'scale', 'ground', 'board', 'notes', 'desks'}
 LOOKS = {'name', 'shirt', 'pants', 'skin', 'hair', 'hair_style', 'face', 'face_family', 'face_marks', 'outfit'}
 SCAST = LOOKS | {'at', 'yaw'}
-PROP = {'name', 'kind', 'on', 'at', 'z', 'rot', 'held_by', 'hand', 'until'}
+PROP = {'name', 'kind', 'on', 'at', 'z', 'rot', 'held_by', 'hand', 'until', 'shake'}
 BEAT = {'t', 'who', 'walk', 'speed', 'run', 'stride', 'hand', 'sit', 'stand', 'fall', 'get_up', 'give', 'throw', 'turn', 'pose', 'jump',
         'wiggle', 'wiggle_s', 'anim', 'loop', 'anim_speed', 'anim_skip', 'face', 'talk', 'gesture', 'look', 'track', 'grab', 'move',
         'attack', 'block', 'dodge', 'knockback', 'down', 'fly', 'land', 'power_up', 'aura', 'aura_color', 'beam', 'exclaim', 'transform',
@@ -688,6 +688,15 @@ def lint_scene(R, L, S, sc, si, looks, sdir, fps):
     if shots and mode in ('follow_oneshot', 'ots_dialogue', 'static_wide', 'chase_track', 'two_shot_react'):
         R.warn(W, 'shots', f"camera mode '{mode}' writes its own shots: yours are ignored")
     ss = sorted([(s.get('t', 0), k) for k, s in enumerate(shots) if isinstance(s, dict) and num(s.get('t'))])
+    # SIZE VARIETY (critics 20261115-1320: "the same chest-up medium of the girl in 1, 5, 8, 13"): a character who is the single
+    # focus of 3+ shots in a scene, all the same size, reads as one repeated shot -> vary (close for the emotional beat, full to re-place)
+    per_ = {}
+    for _, k in ss:
+        s_ = shots[k]; on_ = s_.get('on', names[:1]); on_ = [on_] if isinstance(on_, str) else on_
+        if len(on_) == 1 and on_[0] in cast: per_.setdefault(on_[0], []).append(s_.get('kind', 'medium'))
+    for who_, ks_ in per_.items():
+        if len(ks_) >= 3 and len(set(ks_)) == 1:
+            R.warn(W, 'shots', f"{who_} is the focus of {len(ks_)} shots, all '{ks_[0]}': vary the size (a close for the emotional beat, a full to re-place them)")
     if ss and ss[0][0] > 0.01: R.warn(f'{W} shot[{ss[0][1]}]', 't', f'the first shot starts at {ss[0][0]} -> the first shot needs "t": 0')
     for j, (st0, k) in enumerate(ss):
         s = shots[k]; w = f'{W} shot[{k}]'; st1 = ss[j + 1][0] if j + 1 < len(ss) else secs

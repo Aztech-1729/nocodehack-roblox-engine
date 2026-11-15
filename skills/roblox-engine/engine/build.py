@@ -1066,6 +1066,22 @@ def build(spec, log):
             log.setdefault('notes', []).append(f"prop {p['name']}: unknown kind '{p.get('kind')}' -> box")
             props[p['name']] = sets.prop('box', p['name'], at, p.get('rot', 0))
     bpy.context.view_layer.update()
+    # PROP SHAKE (story key props[].shake = [seconds]): the prop jolts ~0.5 s - something alive inside a box, a buzzing phone,
+    # a rattling cupboard (the engine has no animal models: a hidden pet reads through its box; critics R 20261115-1240).
+    # Never on a prop a character holds / grabs / gives / throws (the hand-contact system owns those keys).
+    handled_ = {(b.get(k_) or {}).get('prop') for b in spec.get('beats', []) for k_ in ('grab', 'give', 'throw') if isinstance(b.get(k_), dict)}
+    for p in spec.get('props', []):
+        if not p.get('shake'): continue
+        if p.get('held_by') or p['name'] in handled_:
+            log.setdefault('notes', []).append(f"prop {p['name']}: shake ignored (the prop is held/grabbed/given/thrown)"); continue
+        o_ = props[p['name']]; L0 = o_.location.copy(); R0 = o_.rotation_euler.copy()
+        for ts_ in p['shake']:
+            f0_ = F(ts_, fps); o_.location = L0; o_.rotation_euler = R0
+            o_.keyframe_insert('location', frame=f0_); o_.keyframe_insert('rotation_euler', frame=f0_)
+            for k_, (dz_, rz_) in enumerate(((0.06, 5), (0.0, -6), (0.05, 6), (0.0, -4), (0.03, 2), (0.0, 0))):
+                o_.location = L0 + Vector((0, 0, dz_)); o_.rotation_euler = Euler((R0.x, R0.y, R0.z + math.radians(rz_)))
+                o_.keyframe_insert('location', frame=f0_ + 2 * (k_ + 1)); o_.keyframe_insert('rotation_euler', frame=f0_ + 2 * (k_ + 1))
+        o_.location = L0; o_.rotation_euler = R0
     for p in spec.get('props', []):   # R217 a prop placed by `at` UNDER a set surface (banana at z 0 inside a 0.44 m park slab: every insert
         if p.get('on') or p.get('held_by'): continue   # camera read it 0.0, probe p7 s02) rests ON that surface: nothing spawns buried
         pr_ = props[p['name']]; ms_ = [o for o in [pr_] + list(pr_.children_recursive) if o.type == 'MESH']

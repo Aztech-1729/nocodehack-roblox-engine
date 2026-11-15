@@ -174,6 +174,7 @@ Story rules (story.py):
 | `held_by` | none | cast name: the prop starts in that character's hand (carry pose at t=0) |
 | `hand` | `R` | `R` or `L`, with `held_by` |
 | `until` | end | seconds: when the held prop is released (dropped unless handed over) |
+| `shake` | none | list of seconds: the prop jolts ~0.5 s at each (something alive inside a box, a buzzing phone). Ignored on a prop that is held, grabbed, given or thrown |
 
 **kind:**
 - Built-in: `box` (default), `book`, `phone`, `ball`, `cake`.
