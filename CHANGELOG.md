@@ -3,6 +3,17 @@
 Every fix to the NoCodeHack Roblox Engine, newest first: what you saw, why it happened, what changed, and how it was tested.
 Found a problem? Open an issue or comment on the video, it lands here.
 
+## 1.10.1 · 2026-11-15 · Opening shots keep faces readable
+
+**What you saw:** after 1.9.0 some scenes opened on a very wide shot where the characters were tiny and their faces could not
+be read on a phone.
+
+**What changed:** the directing guide now opens a scene with one or two characters on a `full` shot; `wide` is kept for three
+or more people or a big action (a chase, a fall).
+
+**Tested:** the same idea written by a fresh AI agent with the previous and the new guide (also using the new box shake), judged
+by two critic agents next to two reference Shorts: camera 3 -> 4, story 2 -> 3.5. The new story had zero framing problems.
+
 ## 1.10.0 · 2026-11-15 · Props can shake: a hidden pet you can actually "see"
 
 **What you saw:** stories about a hidden pet where nothing showed the pet: the engine has no animal models, so the box just

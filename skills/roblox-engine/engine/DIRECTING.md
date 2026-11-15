@@ -10,7 +10,8 @@ classic film-craft books (shot grammar, visual structure, animation timing); tes
 2. **One beat = one readable event.** Every 1-1.5 s the viewer should see ONE action, reaction or reveal, with one clear
    subject. Two things at once: split them into two beats.
 3. **Show the place first.** Every new location opens with a `full` or `wide` shot of about 1 s that shows the room and who
-   stands where; then go closer. (Never switch off the engine's establishing shot to avoid a wide.)
+   stands where; then go closer. With one or two characters use `full` (faces stay readable on a phone); `wide` is for three
+   or more people or a big action (a chase, a fall). (Never switch off the engine's establishing shot to avoid a wide.)
    **Shot size follows pressure, not the clock.** `wide`/`full` to show where we are and who stands where, `medium` for talk,
    `close` when it becomes personal, the closest framing at the climax. Do not start close and stay close.
 4. **Things the engine cannot show (an animal, a ghost) live inside a prop that reacts:** a box on the floor that `shake`s at
