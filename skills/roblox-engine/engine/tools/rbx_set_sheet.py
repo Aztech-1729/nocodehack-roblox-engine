@@ -1,10 +1,10 @@
 """rbx_set_sheet.py - evidence sheet for the imported Roblox sets: per set a Cycles look still (9:16 medium-wide, one standing R6 character
 for scale) next to the Studio thumbnail. Plain python:  python tools/rbx_set_sheet.py [tag ...]  -> assets/rbxsets/sheet.jpg + <set>/preview.jpg
 Blender worker (one set):  blender -b --factory-startup --offline-mode -P tools/rbx_set_sheet.py -- <set dir>"""
-import json, math, subprocess, sys
+import json, math, os, subprocess, sys
 from pathlib import Path
 E = Path(__file__).resolve().parents[1]
-BL = 'C:/Program Files/Blender Foundation/Blender 5.2/blender.exe'
+BL = os.environ.get('BLENDER', 'C:/Program Files/Blender Foundation/Blender 5.2/blender.exe')   # same override story.py honors
 
 
 def worker(sdir):

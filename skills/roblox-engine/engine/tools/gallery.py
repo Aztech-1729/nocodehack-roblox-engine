@@ -1,9 +1,9 @@
 """gallery.py [preset ...] - build a 2-character test scene in every rooms.py preset and render 3 look stills each
 -> shorts/g_<preset>/out/look + one combined sheet trace/<stamp>_gallery.jpg. Regression bench for 'any story' sets."""
-import json, subprocess, sys, time
+import json, os, subprocess, sys, time
 from pathlib import Path
 E = Path(__file__).resolve().parents[1]
-BL = 'C:/Program Files/Blender Foundation/Blender 5.2/blender.exe'
+BL = os.environ.get('BLENDER', 'C:/Program Files/Blender Foundation/Blender 5.2/blender.exe')   # same override story.py honors
 PRESETS = sys.argv[1:] or ['bedroom', 'kitchen', 'store', 'hallway', 'classroom2', 'street', 'park', 'living_room:night']
 rows = []
 for pr in PRESETS:
