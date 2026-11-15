@@ -5,6 +5,7 @@ import argparse, hashlib, json, os, shutil, subprocess, sys, urllib.request
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SIGNUP = 'https://try.elevenlabs.io/m7d07a0chdsb'
+WORD_S = 1 / 0.3   # fallback words/second when ffprobe cannot read a clip (~0.3 s per spoken word)
 API = 'https://api.elevenlabs.io'
 
 
@@ -31,8 +32,10 @@ def lines(story):
     return out
 
 
-def dur(path):
-    return float(subprocess.run(['ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', path], capture_output=True, text=True).stdout)
+def dur(path, words=0):
+    r = subprocess.run(['ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', path], capture_output=True, text=True, timeout=10)
+    try: return float(r.stdout.strip())
+    except ValueError: return round(words * WORD_S, 2)   # an unreadable file: fall back to the word-count estimate instead of crashing after paid TTS
 
 
 def polish(raw, out):   # trim lead/trail silence, loudnorm -16 LUFS
@@ -60,7 +63,7 @@ def run(story_path, model='eleven_v4', redo=False, dry=False, http=http, env=Non
                     if attempt == 2: raise
             open(fp + '.raw.mp3', 'wb').write(raw); polish(fp + '.raw.mp3', fp); os.remove(fp + '.raw.mp3')
         b[k] = rel
-        if k == 'voice': b['talk'] = round(dur(fp), 2)   # mouth time; narrator lines never move mouths, so no talk
+        if k == 'voice': b['talk'] = dur(fp, words=len(text.split()))   # mouth time; narrator lines never move mouths, so no talk
     json.dump(story, open(story_path, 'w', encoding='utf-8'), indent=2, ensure_ascii=False)
     return 0
 

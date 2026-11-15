@@ -4,8 +4,10 @@ import subprocess, sys
 
 a, b, out = sys.argv[1:4]; n = int(sys.argv[4]) if len(sys.argv) > 4 else 8; w = int(sys.argv[5]) if len(sys.argv) > 5 else 300
 def count(p):
-    return int(subprocess.run(['ffprobe', '-v', 'error', '-count_packets', '-select_streams', 'v:0', '-show_entries', 'stream=nb_read_packets',
-                               '-of', 'csv=p=0', p], capture_output=True, text=True).stdout.strip())
+    r = subprocess.run(['ffprobe', '-v', 'error', '-count_packets', '-select_streams', 'v:0', '-show_entries', 'stream=nb_read_packets',
+                        '-of', 'csv=p=0', p], capture_output=True, text=True)
+    if r.returncode != 0 or not r.stdout.strip().isdigit(): raise SystemExit(f'ab_sheet: cannot count frames in {p} ({r.stderr[-160:]})')
+    return int(r.stdout.strip())
 m = min(count(a), count(b)); fr = [round((i + 0.5) * m / n) for i in range(n)]
 sel = '+'.join(f'eq(n\\,{f})' for f in fr)
 fc = f"[0]select='{sel}',scale={w}:-2,tile={n}x1[x];[1]select='{sel}',scale={w}:-2,tile={n}x1[y];[x][y]vstack"

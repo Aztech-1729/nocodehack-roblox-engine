@@ -26,7 +26,7 @@ def worker(sdir):
         if spot: break
     spot = spot or (cx, y0 + .3 * D)
     for q in assets.PLACED:   # the sheet camera stands inside the front wall: hide whatever is a thin wall right there
-        if q['rect'][3] < y0 + 1.0 or q['rect'][1] < x0 + 1.0 and False:
+        if q['rect'][3] < y0 + 1.0 or q['rect'][1] < x0 + 1.0:
             for o in q['pivot'].children_recursive: o.hide_render = True
     ch = rig.make('Max', (spot[0] / S, spot[1] / S), 0)
     cam = bpy.data.objects.new('cam', bpy.data.cameras.new('cam')); sc.collection.objects.link(cam); sc.camera = cam

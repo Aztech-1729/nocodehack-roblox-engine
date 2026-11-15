@@ -42,7 +42,9 @@ def queue(kind, kw, tag, n):
 
 
 def log_rows():
-    lg = max((Path(os.environ['LOCALAPPDATA']) / 'Roblox' / 'logs').glob('*Studio*'), key=lambda p: p.stat().st_mtime); rows = {}
+    logs_ = list((Path(os.environ['LOCALAPPDATA']) / 'Roblox' / 'logs').glob('*Studio*'))
+    if not logs_: raise SystemExit('no Roblox Studio logs found - open Studio and run the batch first')
+    lg = max(logs_, key=lambda p: p.stat().st_mtime); rows = {}
     for ln in lg.read_text(encoding='utf-8', errors='replace').splitlines():
         i = ln.find('OUTFITJSON ')
         if i >= 0: r = json.loads(ln[i + 11:]); rows[r['id']] = r

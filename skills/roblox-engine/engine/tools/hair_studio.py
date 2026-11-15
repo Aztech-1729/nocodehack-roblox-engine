@@ -83,7 +83,9 @@ def ktx2_png(b, path):
 
 def log_rows():
     """HAIRJSON lines printed by hair_batch.luau, from the newest Studio log (last row per id wins)."""
-    lg = max((RBX / 'logs').glob('*Studio*'), key=lambda p: p.stat().st_mtime)
+    logs_ = list((RBX / 'logs').glob('*Studio*'))
+    if not logs_: raise SystemExit('no Roblox Studio logs found - open Studio and run the batch first')
+    lg = max(logs_, key=lambda p: p.stat().st_mtime)
     rows = {}
     for ln in lg.read_text(encoding='utf-8', errors='replace').splitlines():
         i = ln.find('HAIRJSON ')

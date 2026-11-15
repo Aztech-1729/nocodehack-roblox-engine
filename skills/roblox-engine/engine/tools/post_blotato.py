@@ -123,7 +123,9 @@ def cmd_post(a):
         a.account = str(yt[0]["id"])
     up = call("POST", BASE + "/media/uploads", key, body={"filename": v.name})
     call("PUT", up["presignedUrl"], raw=v.read_bytes(), ctype=ctype)  # presigned URL: no api-key header
-    sub = call("POST", BASE + "/posts", key, body=post_body(a.account, up["publicUrl"], a))["postSubmissionId"]
+    resp = call("POST", BASE + "/posts", key, body=post_body(a.account, up["publicUrl"], a))
+    sub = resp.get("postSubmissionId")
+    if not sub: die(f"no postSubmissionId in the response: {json.dumps(resp)[:400]}")   # the video upload succeeded; say what came back
     print("submitted:", sub)
     for _ in range(40):
         st = call("GET", f"{BASE}/posts/{sub}", key)
