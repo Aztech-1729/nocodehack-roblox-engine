@@ -3,6 +3,20 @@
 Every fix to the NoCodeHack Roblox Engine, newest first: what you saw, why it happened, what changed, and how it was tested.
 Found a problem? Open an issue or comment on the video, it lands here.
 
+## 1.8.0 · 2026-11-15 · The engine now spots arms blocking the shot
+
+**What you saw:** shots where a gesturing arm or shoulder covered a big part of the frame, and nothing warned about it.
+
+**Why:** the engine's body check counted the character's own torso too, so almost every medium shot scored the same and real
+arm slabs did not stand out.
+
+**What changed:** a new measurement counts only arms, legs and other characters in front of the camera (never the subject's
+own torso). When it is high, the `LOOK` line says `arm across the frame`, and the skill's fix table tells Claude what to do:
+a calmer pose, `gesture: false` on that line, or turning the character side-on. Information only: it never changes a render.
+
+**Tested:** on 72 shots the four highest scores were exactly the arm-slab shots a critic had pointed out; on 5 test stories
+all checks pass and the framing is unchanged.
+
 ## 1.7.1 · 2026-11-15 · Listeners react after the line starts, not before
 
 **What you saw:** in conversations, the listening character turned to the speaker a moment *before* the speaker said

@@ -99,6 +99,7 @@ that scene with `--only N --tier draft`:
 | a character is a dark silhouette | lighter shirt/hair colour, or scene `mood` `default`/`warm` |
 | the same shot for 4+ frames | more beats (reactions, a look, a gesture) in that stretch |
 | `back of a head` / `face turned away` (LOOK) | turn the character toward the camera first (`turn`, or face front and hold ~1 s before walking away), then `front: true` on the shot. `front` alone on a character walking away fails the face gate |
+| `arm across the frame` / `limb fills the frame` (LOOK) | the arm belongs to a gesture: `gesture: false` on that line, a calmer `pose`, or turn that character side-on to the lens (`turn`). The camera cannot avoid it |
 | a prop nobody can see | a `look` or `grab` beat on it (insert close-up) |
 | `eyes hidden` (LOOK) / eyes hidden by a fringe | another hair (fringe hairs: ponytail1, ponytail2, fluffy_fringe1, spiky_messy2, wavy3, messy_bun1) |
 | a fight filmed from behind | `profile: true` + `keep_two: true` |

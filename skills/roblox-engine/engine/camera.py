@@ -426,6 +426,7 @@ def unread(c, v_, eyes=True):
     if g(' front~', 1.0) < 0.5: out.append('face turned away')
     if eyes and g(' eyes~', 1.0) < 0.5: out.append('eyes hidden')
     if v_.get('body~', 0.0) > (0.5 if char else 0.15): out.append('limb fills the frame')
+    elif v_.get('limbs~', 0.0) >= 0.40: out.append('arm across the frame')   # limbs~ = arms/legs + other actors only (bench5: the 4 top shots were kimi_puppy2's arm slabs; median 0.28)
     if not char and min([x for k, x in v_.items() if not k.endswith('~')] or [1.0]) < 0.75: out.append('prop half hidden')
     if (' wide' in c or ' full' in c) and any(k.endswith(' face') for k in v_) and any(k.endswith(' face~') and x < 0.3 for k, x in v_.items()):
         out.append('back of a head')
@@ -620,7 +621,7 @@ def fg_void(sc, cam, f, subj_dist):
            into the flat world colour (factory Short R212b frame 6).
     body = rays that end on a character but not on a subject's head/hair/face (BODY['heads']): arms, legs, torsos."""
     sc.frame_set(f); bpy.context.view_layer.update(); dg = bpy.context.evaluated_depsgraph_get()
-    M = cam.matrix_world; P = M.translation; fr = cam.data.view_frame(scene=sc); lim = min(1.2, 0.35 * subj_dist); n = nb = nv = nl = no = 0; open_ = bool(ROOM.get('cam'))
+    M = cam.matrix_world; P = M.translation; fr = cam.data.view_frame(scene=sc); lim = min(1.2, 0.35 * subj_dist); n = nb = nv = nl = no = nlb = 0; open_ = bool(ROOM.get('cam'))
     for i in range(6):
         for j in range(10):
             u, v = (i + 0.5) / 6, (j + 0.5) / 10
@@ -628,14 +629,18 @@ def fg_void(sc, cam, f, subj_dist):
             ok, loc, _, _, obj, _ = sc.ray_cast(dg, P, d, distance=120)
             if not ok: nv += open_; continue
             if obj is None: continue
+            hit0_ = obj
             if _of_char(obj):   # body = character geometry that is not a subject's head / hair / face (R240: limbs filling inserts)
                 o = obj
                 while o is not None and o not in BODY['heads']: o = o.parent
                 nl += o is None
                 while obj.parent is not None: obj = obj.parent
                 no += bool(BODY.get('mine')) and obj not in BODY['mine']   # other~: a character that is not a subject of this shot
+                nm_ = hit_.name if (hit_ := hit0_) is not None else ''
+                nlb += (' arm' in nm_ or ' leg' in nm_ or (bool(BODY.get('mine')) and obj not in BODY['mine']))   # limbs~: arms/legs of anyone + other actors, never the subject's own torso/head
             elif (loc - P).length <= 0.75 * subj_dist and not any(obj.name.startswith(k) or k in obj.name for k in PLAIN):   # a floor is not a void
                 nb += 1; n += (loc - P).length < lim
+    LIMB[0] = nlb / 60.0
     return n / 60.0, nb / 60.0, nv / 60.0, nl / 60.0, no / 60.0
 
 
@@ -718,6 +723,7 @@ def _richness(sc, cam, f, subj_dist=None):
 
 
 CAST_NAMES = []
+LIMB = [0.0]
 BODY = {'heads': set(), 'thr': 9.0, 'mine': set()}   # per shot: head/hair parents of the subject characters; body~ share above which the frame is "a limb"
 FRONT = []    # per dense frame of the last measure(): cosine between the focus face normal and the direction to the lens
 FRAMED = []   # per dense frame of the last measure(): focus head + hair fully in frame
@@ -1182,12 +1188,13 @@ def _shot(sc, name, f0, f1, kind='medium', subjects=(), side=0.0, lens=50, push=
     def frame_measures(fv, sd_):
         """Report-only '~' numbers of the MOVED camera (a push-in dollies onto a desk edge): slab / void, body share, face-on."""
         one_ = len(subj_chars) == 1 and len(subjects) == 1   # a single: another actor's arm sweeping past the lens is looked for on 7 frames (showcase s02: Goku's arm across Krillin's close for its first 6 frames, missed by f0 / mid / f1)
-        fg_ = [fg_void(sc, cam, f_, sd_) for f_ in (sorted({f0, min(f1, f0 + 3), min(f1, f0 + 6), f0 + (f1 - f0) // 4, (f0 + f1) // 2, f0 + 3 * (f1 - f0) // 4, f1}) if one_ and BODY['thr'] < 9 else (f0, (f0 + f1) // 2, f1) if BODY['thr'] < 9 else (f0, f1))]
+        lb_ = []; fg_ = [(fg_void(sc, cam, f_, sd_), lb_.append(LIMB[0]))[0] for f_ in (sorted({f0, min(f1, f0 + 3), min(f1, f0 + 6), f0 + (f1 - f0) // 4, (f0 + f1) // 2, f0 + 3 * (f1 - f0) // 4, f1}) if one_ and BODY['thr'] < 9 else (f0, (f0 + f1) // 2, f1) if BODY['thr'] < 9 else (f0, f1))]
         ends_ = (fg_[0], fg_[-1])
         fv['fg~'] = round(max(x[0] for x in ends_), 2); fv['fgb~'] = round(max(x[1] for x in ends_), 2)
         if ROOM.get('cam'): fv['bg~'] = round(max(x[2] for x in ends_), 2)
         if BODY['thr'] < 9: fv['body~'] = round(max(x[3] for x in fg_), 2)
         if one_: fv['other~'] = round(max(x[4] for x in fg_), 2)
+        if one_ and lb_ and kind in ('close', 'medium'): fv['limbs~'] = round(max(lb_), 2)   # measured only (prototype, trace/20261115-1015)
         if top_fit or (angle == 'top' and frame): fv['fg~'] = max(fv['fg~'], fv['fgb~'])   # straight down: ANY set geometry between the lens and the body (a rock pillar top) is a slab
         if subj_chars and FRONT and not FACE_OPT[0] and not lying: fv[subj_chars[0].name + ' front~'] = round(sum(FRONT) / len(FRONT), 2)
     still_ = set()   # candidates whose camera move lost a target the static camera shows: held still (handheld drift only)
