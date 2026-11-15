@@ -3,6 +3,26 @@
 Every fix to the NoCodeHack Roblox Engine, newest first: what you saw, why it happened, what changed, and how it was tested.
 Found a problem? Open an issue or comment on the video, it lands here.
 
+## 1.9.0 · 2026-11-15 · Every scene now shows where we are
+
+**What you saw:** Shorts made almost only of chest-up shots: you never saw the room or who stands where.
+
+**Why:** the skill's own fix table told Claude to switch off the engine's establishing shot and open on a medium whenever a
+head was cropped, and to switch off the automatic camera angles in every scene.
+
+**What changed:**
+- The directing guide: every new location opens with a ~1 s `full` or `wide` that shows the room and who stands where.
+- The fix table: a cropped head now means *that shot one size wider*; the establishing shot is switched off only for a
+  scene that continues in the same place; the automatic high/low angles are switched off only in the scene where faces
+  are hidden.
+
+**Tested:** the same story idea written by a fresh AI agent before and after, judged by two critic agents next to two
+reference Shorts: camera 3 -> 4, story 3 -> 3.5. Both picked the new version (room established, more shot types).
+
+| Before | After |
+|---|---|
+| <img src="docs/img/changelog/1.9.0_before.jpg" width="400"> | <img src="docs/img/changelog/1.9.0_after.jpg" width="400"> |
+
 ## 1.8.0 · 2026-11-15 · The engine now spots arms blocking the shot
 
 **What you saw:** shots where a gesturing arm or shoulder covered a big part of the frame, and nothing warned about it.

@@ -94,8 +94,8 @@ and open `draft_sheet.jpg`; write down every shot that has one of these problems
 that scene with `--only N --tier draft`:
 | You see | Fix |
 |---|---|
-| `head cropped` (LOOK), opening frame cuts a body in half, or a tiny-people wide | scene key `"establish": false`, first shot `medium` on the hero |
-| faces hidden under hair from above | scene key `"pitch": false` |
+| `head cropped` (LOOK) or a body cut in half | that shot one size wider (`close` -> `medium`, `medium` -> `full`). `"establish": false` only for a scene that continues straight on from the previous one in the same place |
+| faces hidden under hair from above (`eyes hidden` on a `high` shot) | scene key `"pitch": false` in THAT scene only (the automatic low/high angles give the Short its variety) |
 | a character is a dark silhouette | lighter shirt/hair colour, or scene `mood` `default`/`warm` |
 | the same shot for 4+ frames | more beats (reactions, a look, a gesture) in that stretch |
 | `back of a head` / `face turned away` (LOOK) | turn the character toward the camera first (`turn`, or face front and hold ~1 s before walking away), then `front: true` on the shot. `front` alone on a character walking away fails the face gate |
