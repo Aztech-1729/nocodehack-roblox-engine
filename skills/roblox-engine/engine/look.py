@@ -202,8 +202,8 @@ def neutral_bounce(sat=0.25):
 
 
 def _base(sc, preset, info):
-    if preset == 'auto' or (info is not None and preset not in LIGHTS):
-        return apply_auto(sc, info or {})
+    if preset == 'auto' or preset not in LIGHTS or (info is not None and preset not in LIGHTS):
+        return apply_auto(sc, info or {})   # a writer naming a mood ('warm') instead of a light preset lands here
     for name, loc, tgt, w, col, size in LIGHTS[preset]:
         d = bpy.data.lights.new(name, 'AREA'); d.energy, d.color, d.shape, d.size = w * K * K, col, 'DISK', size * K
         o = bpy.data.objects.new(name, d); bpy.context.collection.objects.link(o)
@@ -503,7 +503,8 @@ def _lowkey(sc, enabled):
         # Save both material states below so switching back to draft is lossless.
         for mat in bpy.data.materials:
             if 'lowkey_emission' in mat:
-                bs = mat.node_tree.nodes.get('Principled BSDF')
+                bs = next((n for n in mat.node_tree.nodes if n.type == 'BSDF_PRINCIPLED'), None)   # the setter matches by type; so does the reader
+                if bs is None: continue
                 mat['lowkey_dark_color'] = list(bs.inputs['Base Color'].default_value)
                 mat['lowkey_dark_emission'] = bs.inputs['Emission Strength'].default_value
     if not sc.get('lowkey_ready'): return
@@ -681,6 +682,7 @@ def upscale(out, up, size=(1080, 1920)):
     from pathlib import Path
     if os.environ.get('ENGINE_UPSCALE') == 'realesrgan' and os.path.exists(RESR):
         Path(up).mkdir(parents=True, exist_ok=True)
+        shutil.rmtree(up, ignore_errors=True)   # a shorter re-render must not leave stale higher-numbered frames behind
         r = subprocess.run([RESR, '-i', str(out), '-o', str(up), '-n', 'realesr-animevideov3', '-s', '2', '-f', 'png'], capture_output=True, text=True)
         if r.returncode == 0: return Path(up), ['-vf', f'scale={size[0]}:{size[1]}:flags=lanczos']   # x2 is already 1080x1920; the scale is a guard
         print('WARNING Real-ESRGAN failed, Lanczos instead:', r.stderr[-300:], flush=True)
