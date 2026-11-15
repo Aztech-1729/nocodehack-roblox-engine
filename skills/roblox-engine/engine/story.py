@@ -55,7 +55,8 @@ def main():
         rep = next((l for l in r.stdout.splitlines() if l.startswith('REPORT')), f'REPORT CRASH exit {r.returncode}')
         if r.returncode and 'CRASH' in rep:
             rep += ' ' + ' | '.join([l for l in (r.stdout + r.stderr).splitlines() if 'Error' in l and 'HIP' not in l][-3:])
-        return k, rep
+        lk = next((l for l in r.stdout.splitlines() if l.startswith('LOOK ')), None)   # readability notes for the draft fix loop
+        return k, rep + (f'\n     {lk}' if lk else '')
     from concurrent.futures import ThreadPoolExecutor
     with ThreadPoolExecutor(max_workers=jobs) as ex:
         res = dict(ex.map(lambda w: run_scene(*w), work))

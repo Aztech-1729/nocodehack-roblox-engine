@@ -3,6 +3,21 @@
 Every fix to the NoCodeHack Roblox Engine, newest first: what you saw, why it happened, what changed, and how it was tested.
 Found a problem? Open an issue or comment on the video, it lands here.
 
+## 1.5.0 · 2026-11-15 · The engine now tells Claude which shots read badly
+
+**What you saw:** shots where a character's eyes were hidden under their fringe, a head cut off at the top, or the back of a
+head instead of a face, which Claude missed when looking at the small draft thumbnails.
+
+**Why:** the engine already measured all of this for every shot, but only used it to pick camera angles; Claude never saw
+the numbers.
+
+**What changed:** after each scene the engine prints a `LOOK` line, for example
+`LOOK S04 eyes hidden; S06 head cropped/eyes hidden`. The skill's draft fix loop reads it and fixes each listed shot
+(another hair, a wider size, turning the character). It is information only: it never blocks a build or changes a render.
+
+**Tested:** on the fresh-user test story, the `LOOK` line listed exactly the three shots where the mom's eyes were hidden on
+the draft sheet, plus the cropped heads and backs of heads; checks and renders unchanged.
+
 ## 1.4.2 · 2026-11-15 · Lessons from a fresh test run
 
 A brand-new Claude, with only this skill, made a Short ("a girl hides her new puppy from her mom"). Gates passed first

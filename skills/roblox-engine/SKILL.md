@@ -88,17 +88,18 @@ The camera cuts on actions: a story with few beats gets few shots. Before step 2
   hair and clothes light enough to read (no near-black clothes at night), or use `mood` `cool`/`default`.
 
 ### Draft fix loop (step 4, up to 3 rounds)
-Open `draft_sheet.jpg` and write down every frame that has one of these problems, then fix it in story.json and rebuild
+Read each scene's `LOOK` line (printed under its REPORT: the engine's own measurements per shot, e.g. `S06 head cropped/eyes hidden`)
+and open `draft_sheet.jpg`; write down every shot that has one of these problems, then fix it in story.json and rebuild
 that scene with `--only N --tier draft`:
 | You see | Fix |
 |---|---|
-| opening frame cuts a body in half, or a tiny-people wide | scene key `"establish": false`, first shot `medium` on the hero |
+| `head cropped` (LOOK), opening frame cuts a body in half, or a tiny-people wide | scene key `"establish": false`, first shot `medium` on the hero |
 | faces hidden under hair from above | scene key `"pitch": false` |
 | a character is a dark silhouette | lighter shirt/hair colour, or scene `mood` `default`/`warm` |
 | the same shot for 4+ frames | more beats (reactions, a look, a gesture) in that stretch |
-| back of a head instead of a face | turn the character toward the camera first (`turn`, or face front and hold ~1 s before walking away), then `front: true` on the shot. `front` alone on a character walking away fails the face gate |
+| `back of a head` / `face turned away` (LOOK) | turn the character toward the camera first (`turn`, or face front and hold ~1 s before walking away), then `front: true` on the shot. `front` alone on a character walking away fails the face gate |
 | a prop nobody can see | a `look` or `grab` beat on it (insert close-up) |
-| eyes hidden by a fringe | another hair (fringe hairs: ponytail1, ponytail2, fluffy_fringe1, spiky_messy2, wavy3, messy_bun1) |
+| `eyes hidden` (LOOK) / eyes hidden by a fringe | another hair (fringe hairs: ponytail1, ponytail2, fluffy_fringe1, spiky_messy2, wavy3, messy_bun1) |
 | a fight filmed from behind | `profile: true` + `keep_two: true` |
 A fix that makes a gate FAIL: undo it and try the next fix for that frame. `draft_sheet.jpg` is rebuilt from the scene videos on disk,
 so after `--only N` rounds run one full `--tier draft` before judging the whole sheet.

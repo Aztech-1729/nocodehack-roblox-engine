@@ -2783,3 +2783,7 @@ if __name__ == '__main__':
     print('REPORT', 'PASS' if not bad else 'FAIL ' + '; '.join(bad), f"| hits {log['pen_hits']} worst {log['pen_worst_cm']}cm",
           f"| slide {max(log.get('foot_slide', {}).values(), default=0)}cm | cuts {'OK' if not log['jump_cuts'] else log['jump_cuts']}",
           f"| build {log['build_s']}s", f"| render {log.get('render', {}).get('s', 0)}s", f"| {log.get('video', '')}")
+    # readability notes (never a gate): the shot measurements a writer should act on in the draft fix loop (eyes under a
+    # fringe, head cropped, face turned away...) - printed as numbers so Claude does not have to spot them in a thumbnail
+    look_ = [f"{c.split()[0]} {'/'.join(r)}" for c, v in log.get('visibility', {}).items() for r in [camera.unread(c, v)] if r]
+    if look_: print('LOOK', '; '.join(look_[:8]) + (f' (+{len(look_) - 8})' if len(look_) > 8 else ''))
