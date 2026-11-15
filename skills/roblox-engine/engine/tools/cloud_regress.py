@@ -58,7 +58,7 @@ def cpu_prices(machine, regions):
         def rate(what, reg):
             s = next(s for s in res if s['description'].startswith(f'Spot Preemptible {fam.upper()} {kind} {what} running') and reg in s['serviceRegions'])
             r = s['pricingInfo'][0]['pricingExpression']['tieredRates'][-1]['unitPrice']; return float(r.get('units', 0)) + r['nanos'] / 1e9
-        C[fam] = {r: dict(core=rate('Core', r), ram=rate('Ram', r)) for r in ('europe-west4', 'us-central1', 'asia-southeast1')}
+        C[fam] = {r: dict(core=rate('Core', r), ram=rate('Ram', r)) for r in regions}   # the requested regions, not hardcoded defaults
         json.dump(C, open(cache, 'w'), indent=1)
     return {r: C[fam][r]['core'] * n + C[fam][r]['ram'] * n * SHAPE[(fam, kind)] for r in regions}   # EUR/h; Vertex adds no mgmt fee on CPU types (none in catalog)
 
@@ -142,7 +142,11 @@ def main():
                     del live[d['name']]; rep['jobs'].append(F.job_record(d, reg, [(f'{s}/{tag}', 0, 0)]))
                     r = F.run([F.GSUTIL, 'cat', f'gs://{BUCKET}/regress/{rid}/out/{s}/{tag}/story.log'], check=False, timeout=120)
                     lines = [l for l in r.stdout.splitlines() if re.match(r's\d\d REPORT', l) and 'skipped' not in l]
-                    if r.returncode or not lines:   # preempted / crashed before the report: retry once per region
+                    if r.returncode != 0:   # the cat itself failed (network/token): retry the READ, never resubmit a job that may have passed
+                        n = tries[item]; tries[item] = n + 1
+                        if n < 2: print(f'  {s}/{tag} log read failed, retrying'); continue
+                        print(f'  {s}/{tag} log read failed twice, skipping this poll'); continue
+                    if not lines:   # preempted / crashed before the report: retry once per region
                         n = tries[item]
                         if n < len(regions):
                             print(f'  {s}/{tag} {st} no report, resubmit -> {regions[(regions.index(reg) + 1) % len(regions)]}')

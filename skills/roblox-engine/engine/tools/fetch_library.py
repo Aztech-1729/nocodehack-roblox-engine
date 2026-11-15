@@ -8,7 +8,7 @@ The public repo ships only ids + our own tags/placement (meta.json); meshes, tex
   python tools/fetch_library.py collect set <id>       after that set's insert + export + mesh jobs ran in Studio
 Studio jobs need Roblox Studio open (any place, Edit mode, logged in) with the Studio MCP connected. Nothing is saved or published."""
 import io, json, re, shutil, sys, time, urllib.request, zipfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 E = Path(__file__).resolve().parents[1]; A = E / 'assets'; MAN = E / 'library' / 'manifest'; JOBS = E / 'library' / 'jobs'
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -121,6 +121,8 @@ def rbxmesh():
     tp = E / 'third_party'
     if (tp / 'RBXMesh' / 'RBXMesh.py').exists() or (E.parent / 'third_party' / 'RBXMesh').exists(): return
     z = zipfile.ZipFile(io.BytesIO(urllib.request.urlopen(RBXMESH, timeout=60).read()))
+    for zi in z.infolist():   # Zip Slip: a compromised archive must not write outside third_party/
+        if zi.filename.startswith(('/', '\\')) or '..' in PurePosixPath(zi.filename).parts: raise SystemExit(f'RBXMesh zip has an unsafe member: {zi.filename}')
     z.extractall(tp); (tp / 'RBXMesh-main').rename(tp / 'RBXMesh'); print('RBXMesh ->', tp / 'RBXMesh')
 
 
@@ -171,7 +173,9 @@ def collect_anims(files):
             w = json.loads(t)
             if isinstance(w, list): t = ''.join(x.get('text', '') for x in w if isinstance(x, dict))
         except ValueError: pass
-        t = t[t.index('{'):]; d, _ = json.JSONDecoder().raw_decode(t)
+        i = t.find('{')
+        if i < 0: print('FAIL', s if (s := fn) else fn, 'no JSON in the saved MCP result'); continue
+        t = t[i:]; d, _ = json.JSONDecoder().raw_decode(t)
         for s, a in d.items():
             if s not in want: print('SKIP unknown', s); continue
             if a.get('err') or not a.get('kf'): print('FAIL', s, a.get('err')); continue
