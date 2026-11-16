@@ -1115,6 +1115,7 @@ def build(spec, log):
         raise KeyError(f'unknown look/aim target {name}')
 
     settle = {}   # who -> frame their last walk/turn has settled (grabs wait for it)
+    walk_spans = {}   # who -> the last accepted walk's owned [start, end] frame interval
     lean_for = {}  # who -> forward lean (deg) the approach planned for the next grab
     seated, fallen, seat_back = {}, {}, {}
     vfx_jobs = []   # fight VFX closures, baked after the shots
@@ -1437,6 +1438,7 @@ def build(spec, log):
         lo.LEGACY_FALLBACK = False
         log.setdefault('walks', []).append({'who': who, 'f0': info['f_start'], 'f1': info['f_end'], 'slide_cm': round(100 * info.get('max_plant_drift', 0), 2),
                                             'run': bool(b.get('run') or b.get('speed', 9.5) >= 10), 'stride': 'n' in info and not info.get('segmented')})
+        walk_spans[who] = (info['f_start'], info['f_end'])
         # walking characters look where they go: head back to forward at the walk start, and AT the goal on arrival
         gaze.append((ch, '__forward__', f + 4, 4, False))
         goal = next((el for el in reversed(wl) if isinstance(el, str)), None)
@@ -2099,7 +2101,9 @@ def build(spec, log):
                     break
             else: log.setdefault('errors', []).append(f"t{b['t']} {b['who']} jump rejected: {hit}")
         if any(k in b for k in FIGHT_KEYS):
-            fight_beat(sc, b, ch, f, fps, cast, face_sched, fallen, settle, vfx_jobs, log)
+            span = walk_spans.get(b['who'])
+            active_walk = span if span and span[0] < f <= span[1] else None
+            fight_beat(sc, b, ch, f, fps, cast, face_sched, fallen, settle, vfx_jobs, log, active_walk=active_walk)
         if 'wiggle' in b:
             poses.wiggle(sc, ch, b['wiggle'], f, f + F(b.get('wiggle_s', 0.8), fps))
         if 'anim' in b:   # Roblox R6 animation library (anims.py): {"anim": "dance2", "loop": 2.0 (seconds, repeats), "anim_speed": 1.0, "anim_skip": ["legR"]}

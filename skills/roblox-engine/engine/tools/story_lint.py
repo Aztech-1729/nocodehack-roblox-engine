@@ -202,6 +202,15 @@ def near(x, pool):
 def is_xy(v): return isinstance(v, (list, tuple)) and len(v) >= 2 and all(isinstance(a, (int, float)) for a in v[:2])
 
 
+def finite_num(v):
+    if not isinstance(v, (int, float)) or isinstance(v, bool): return False
+    try: return math.isfinite(float(v))
+    except (OverflowError, ValueError): return False
+
+
+def finite_coords(v, size): return isinstance(v, (list, tuple)) and len(v) == size and all(finite_num(a) for a in v)
+
+
 def num(v): return isinstance(v, (int, float)) and not isinstance(v, bool)
 
 
@@ -587,13 +596,19 @@ def lint_scene(R, L, S, sc, si, looks, sdir, fps):
             sp_ = b.get('speed', 13 if b.get('run') else WALK_SPEED) or WALK_SPEED
             T.move(who, t, t + length / sp_, goal)
         if b.get('sit'): Track.open_span(T.seated[who], t)
+        if 'fly' in b and not isinstance(b.get('fly'), dict): R.err(w, 'fly', 'must be an object with "to", optional "height" and "s"')
         if isinstance(b.get('fly'), dict):
-            fl = b['fly']; to = fl.get('to'); s_ = float(fl.get('s', 1.0)); p0 = T.at(who, t)
+            fl = b['fly']; to = fl.get('to'); p0 = T.at(who, t); q = None
+            sv, hv = fl.get('s', 1.0), fl.get('height', 4)
+            if not finite_num(sv) or sv <= 0: R.err(w, 'fly', f'"s" must be a finite positive number, not {sv!r}'); s_ = 1.0
+            else: s_ = float(sv)
+            if not finite_num(hv) or hv < 0: R.err(w, 'fly', f'"height" must be a finite nonnegative number, not {hv!r}')
             if isinstance(to, str):
                 if to not in cast: R.err(w, 'fly', f"'to' '{to}' is not in this scene's cast{near(to, cast)}"); q = None
                 else: q = toward(p0, T.at(to, t + s_), GUARD)
-            elif isinstance(to, list) and to and is_xy(to[-1]): q = tuple(map(float, to[-1][:2]))
-            else: R.err(w, 'fly', 'to must be a list of [x, y] points ([[4, 0]]) or a cast name'); q = None
+            elif finite_coords(to, 2): q = (float(to[0]), float(to[1]))
+            elif isinstance(to, (list, tuple)) and to and all(finite_coords(p, 2) for p in to): q = tuple(map(float, to[-1]))
+            else: R.err(w, 'fly', 'to must be a finite [x, y] point ([4, 0]), a list of them ([[4, 0]]) or a cast name'); q = None
             if q is not None and p0 is not None and s_ > 0 and dist(p0, q) / s_ > 25 and not Track.inside(T.flying[who], t - 0.05):
                 R.warn(w, 'fly', f'{dist(p0, q):.0f} studs in {s_} s from the ground reads as a teleport -> s >= {math.ceil(dist(p0, q) / 2.5) / 10:.1f} or start from the air')
             if q is not None and size and is_xy(size) and (abs(q[0]) > size[0] / 2 - 1 or abs(q[1]) > size[1] / 2 - 1):
@@ -649,12 +664,44 @@ def lint_scene(R, L, S, sc, si, looks, sdir, fps):
                     T.move(who, t, t + 1.0, land)
                 Track.open_span(T.lying[who], t + 1.0)
         bm = b.get('beam')
-        if isinstance(bm, dict):
-            if isinstance(bm.get('to'), str) and bm['to'] not in cast: R.err(w, 'beam', f"'to' '{bm['to']}' is not in this scene's cast{near(bm['to'], cast)}")
-            df = bm.get('deflect')
-            if isinstance(df, dict) and not (0 < float(df.get('after', 0.5)) < float(bm.get('s', 1.0)) - 0.1):
-                R.err(w, 'beam', f"deflect.after must be inside the beam: 0 < after < s - 0.1 (s = {bm.get('s', 1.0)})")
-            if t - float(bm.get('charge', 0.6)) < 0: R.warn(w, 'beam', 'the charge starts before the scene -> t >= charge')
+        if 'beam' in b:
+            if not isinstance(bm, dict):
+                R.err(w, 'beam', 'must be an object with a cast-name "to"')
+            else:
+                target = bm.get('to')
+                if not isinstance(target, str): R.err(w, 'beam', 'to must be another character name')
+                elif target not in cast: R.err(w, 'beam', f"to '{target}' is not in this scene's cast{near(target, cast)}")
+                elif target == who: R.err(w, 'beam', 'to must name another character, not the caster')
+                duration, charge = bm.get('s', 1.0), bm.get('charge', 0.6)
+                if not finite_num(duration) or duration <= 0:
+                    R.err(w, 'beam', f's must be a finite positive number, not {duration!r}')
+                if not finite_num(charge) or charge < 0:
+                    R.err(w, 'beam', f'charge must be a finite nonnegative number, not {charge!r}')
+                size_b = bm.get('size', 1.0)
+                if not finite_num(size_b) or size_b <= 0:
+                    R.err(w, 'beam', f'size must be a finite positive number, not {size_b!r}')
+                hand, hands = bm.get('hand', 'R'), bm.get('hands')
+                if hands not in (None, 'both'): R.err(w, 'beam', f"hands must be 'both' when supplied, not {hands!r}")
+                if hands != 'both' and hand not in ('R', 'L'): R.err(w, 'beam', f'hand must be R or L, not {hand!r}')
+                color = bm.get('color', '#49BFFF')
+                if not isinstance(color, str) or re.fullmatch(r'#[0-9a-fA-F]{6}', color) is None:
+                    R.err(w, 'beam', f'color must be a #RRGGBB hex color, not {color!r}')
+                df = bm.get('deflect')
+                if df is not None and not isinstance(df, dict): R.err(w, 'beam', 'deflect must be an object')
+                elif isinstance(df, dict):
+                    if 'to' in df and not finite_coords(df['to'], 3): R.err(w, 'beam', f"deflect.to must be three finite [x, y, z] studs, not {df['to']!r}")
+                    if df.get('hand', 'R') not in ('R', 'L'): R.err(w, 'beam', f"deflect.hand must be R or L, not {df.get('hand')!r}")
+                    after = df.get('after', 0.5)
+                    if not finite_num(after) or after <= 0:
+                        R.err(w, 'beam', f'deflect.after must be a finite positive number, not {after!r}')
+                    elif finite_num(duration) and duration > 0:
+                        # Match fight.story_beat's rounded-to-frame sec() and fd < f1 - 2 check.
+                        after_frames = max(1, int(round(float(after) * fps)))
+                        beam_frames = max(1, int(round(float(duration) * fps)))
+                        if after_frames >= beam_frames - 2:
+                            R.err(w, 'beam', f'deflect.after must fall inside the frame-quantized beam (after < s - 2 frames at {fps} fps)')
+                if finite_num(charge) and charge >= 0 and t - float(charge) < 0:
+                    R.warn(w, 'beam', 'the charge starts before the scene -> t >= charge')
         # speech
         say, talk = b.get('say'), b.get('talk')
         if talk is not None and not num(talk): R.err(w, 'talk', 'seconds, a number')

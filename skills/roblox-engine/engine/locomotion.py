@@ -255,6 +255,11 @@ def _step_count(distance, dyaw, step_m=0.5 * S, step_deg=35.0):
     return max(1, math.ceil(distance / step_m - 1e-9), math.ceil(abs(math.degrees(dyaw)) / step_deg - 1e-9))
 
 
+def _standing_pose(ch):
+    e = ch.root.matrix_world.to_euler()
+    return not (abs(e.x) > 0.3 or abs(e.y) > 0.3 or any(abs(h.rotation_euler.x) > 1.0 for h in ch.hips))
+
+
 def step_to(sc, ch, goal_xy, f_start, goal_yaw=None, step_m=0.5 * S, step_deg=35.0, frames_per_step=6, lift_m=0.025,
             feet_goal=None, key_last=True, key_first=True):
     """Planted steps from the current root pose to goal_xy (metres) and goal_yaw (radians, default: keep the heading):
@@ -267,8 +272,7 @@ def step_to(sc, ch, goal_xy, f_start, goal_yaw=None, step_m=0.5 * S, step_deg=35
     Returns the end frame. Replaces the glide shuffle and the root spin of in-place turns (both slid the feet)."""
     sc.frame_set(f_start); bpy.context.view_layer.update()
     r = ch.root; y0 = r.rotation_euler.z; p0 = Vector(r.location.xy); goal = Vector(goal_xy)
-    e = r.matrix_world.to_euler()
-    if abs(e.x) > 0.3 or abs(e.y) > 0.3 or any(abs(h.rotation_euler.x) > 1.0 for h in ch.hips):
+    if not _standing_pose(ch):
         raise ValueError(f'step_to: {r.name} is not standing (seated/lying) at f{f_start}')   # Codex review #5
     floor = min(min((l.matrix_world @ Vector(c)).z for c in l.bound_box) for l in ch.legs)     # the support it stands on
     dyaw = 0.0 if goal_yaw is None else (goal_yaw - y0 + math.pi) % (2 * math.pi) - math.pi
