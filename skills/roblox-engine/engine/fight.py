@@ -326,29 +326,30 @@ def attack(sc, attacker, target, move, frame, log, blocked=False, catch_hand=Non
     _pose(attacker, MOVES[move], frame, legs=False)
     _pose(attacker, FIGHT_STANCE, frame + 6, legs=False)
 
-    # Reaction starts at contact so the target cannot recoil before the fist arrives.
+    # A seated/lying target is still struck, but keeps every one of its authored animation keys.
     reaction = 'hit_body' if foot else 'hit_up' if move == 'uppercut_R' else 'hit_head_L' if move == 'punch_L' else 'hit_head'
-    if tap:   # a flick of the head, nothing more
-        poses.beat(sc, target, TAP_HIT, frame + 2, move=2, antic=0, over=0, settle=0)   # leaning back with the tap also clears the arm
-        poses.beat(sc, target, {'head': (0, 0, 0), 'body': (0, 0, 0)}, frame + 12, move=7, antic=0, over=0, settle=0)
-    elif not blocked:
-        poses.beat(sc, target, MOVES[reaction], frame + 2, move=2, antic=0, over=0, settle=0)
-        poses.beat(sc, target, FIGHT_STANCE, frame + 8, move=4, antic=0, over=0, settle=0)
-    _at(sc, frame)
-    target_base = target.root.location.copy()
-    direction = _direction(target_base - base)
-    # STAGGER STEP back (planted feet), not a root shove: the 0.22 m push in 4 frames dragged the soles 11 cm (Goku vs
-    # Vegeta s02, R169). A knockback that starts on this hit simply overrides the root from its own frame.
-    # A target hit mid-walk stops walking: its later root/leg keys fought the stagger (Dave 7 cm, t_fight_glide).
-    lo._hold(target, frame - 1); _at(sc, frame); lo._hold(target, frame)
-    lo.clear_keys([target.root] + list(target.hips), frame + 1)
-    g_ = target_base + direction * .22
-    if not (blocked or tap):   # a stopped strike or a tap does not push the defender
-        lo.step_to(sc, target, (g_.x, g_.y), frame, frames_per_step=4)
-        FACE(target.name, 'angry' if foot else 'scream', frame)
-        FACE(target.name, 'angry', frame + 8)
-    elif tap:
-        FACE(target.name, 'o', frame)
+    if target_standing:
+        if tap:   # a flick of the head, nothing more
+            poses.beat(sc, target, TAP_HIT, frame + 2, move=2, antic=0, over=0, settle=0)   # leaning back with the tap also clears the arm
+            poses.beat(sc, target, {'head': (0, 0, 0), 'body': (0, 0, 0)}, frame + 12, move=7, antic=0, over=0, settle=0)
+        elif not blocked:
+            poses.beat(sc, target, MOVES[reaction], frame + 2, move=2, antic=0, over=0, settle=0)
+            poses.beat(sc, target, FIGHT_STANCE, frame + 8, move=4, antic=0, over=0, settle=0)
+        _at(sc, frame)
+        target_base = target.root.location.copy()
+        direction = _direction(target_base - base)
+        # STAGGER STEP back (planted feet), not a root shove: the 0.22 m push in 4 frames dragged the soles 11 cm (Goku vs
+        # Vegeta s02, R169). A knockback that starts on this hit simply overrides the root from its own frame.
+        # A target hit mid-walk stops walking: its later root/leg keys fought the stagger (Dave 7 cm, t_fight_glide).
+        lo._hold(target, frame - 1); _at(sc, frame); lo._hold(target, frame)
+        lo.clear_keys([target.root] + list(target.hips), frame + 1)
+        g_ = target_base + direction * .22
+        if not (blocked or tap):   # a stopped strike or a tap does not push the defender
+            lo.step_to(sc, target, (g_.x, g_.y), frame, frames_per_step=4)
+            FACE(target.name, 'angry' if foot else 'scream', frame)
+            FACE(target.name, 'angry', frame + 8)
+        elif tap:
+            FACE(target.name, 'o', frame)
 
     # Contact belongs to the distal limb VOLUME, rather than a point buried inside the fist.
     limb = interact.limb_mesh(pivot)
@@ -574,14 +575,15 @@ def knockback(sc, ch, direction_xy, frame, distance_studs=8, height_studs=2, pos
     end = frame + 24
     root_parts = [ch.root] + list(ch.hips)
     arms = list(ch.arms_piv)
-    _at(sc, frame - 1); lo._hold(ch, frame - 1)
-    for arm in arms: arm.keyframe_insert('rotation_euler', frame=frame - 1)
-    _at(sc, frame); lo._hold(ch, frame)
-    for arm in arms: arm.keyframe_insert('rotation_euler', frame=frame)
-    # An active walk keys root/hips/arms EVERY frame (and the build leans/sways the torso on ch.upper through it), so a fixed
-    # cleanup window let its later keys straighten the body mid-fall. Remove the remaining keys through that walk's own end;
-    # without one, the fall itself owns through `end` (the bounce follows). Keys beyond the owned interval stay untouched.
-    lo.clear_keys(root_parts + arms + [ch.upper], frame + 1, max(end, walk_end) if walk_end is not None else end)
+    if walk_end is not None:   # only a WALKING victim (our fix on PR #2: without a walk this deleted the strike's stagger keys)
+        _at(sc, frame - 1); lo._hold(ch, frame - 1)
+        for arm in arms: arm.keyframe_insert('rotation_euler', frame=frame - 1)
+        _at(sc, frame); lo._hold(ch, frame)
+        for arm in arms: arm.keyframe_insert('rotation_euler', frame=frame)
+        # An active walk keys root/hips/arms EVERY frame (and the build leans/sways the torso on ch.upper through it), so a fixed
+        # cleanup window let its later keys straighten the body mid-fall. Remove the remaining keys through that walk's own end.
+        # Keys beyond the owned interval stay untouched.
+        lo.clear_keys(root_parts + arms + [ch.upper], frame + 1, max(end, walk_end))
     poses.beat(sc, ch, MOVES['hit_head'], frame + 6, move=4, over=0, settle=0)
     if curl:
         poses.beat(sc, ch, curl, end, move=10, over=0, settle=0)   # the pose is complete when the body lands
@@ -700,7 +702,7 @@ def story_beat(sc, b, ch, f, fps, cast, face_sched, fallen, settle, vfx_jobs, lo
             return
     try:
         if b.get('power_up'):   # seconds: brace pose + aura
-            d = sec(b['power_up'] if isinstance(b['power_up'], (int, float)) else 1.5, 'power_up s')
+            d = sec(1.0 if b['power_up'] is True else b['power_up'] if isinstance(b['power_up'], (int, float)) else 1.5, 'power_up s')   # true = 1 s as before (our fix on PR #2: the finite check rejects bools)
             poses.beat(sc, ch, MOVES['power_up'], f + 4, move=4, over=0, settle=0)
             col = b.get('aura_color', '#FFD23F')
             vfx_jobs.append(lambda: vfx.aura(sc, ch, f, f + d, col)); settle[who] = f + d

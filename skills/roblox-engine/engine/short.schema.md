@@ -245,7 +245,7 @@ Each beat: `t` (seconds, required), `who` (cast name, required). Beats run in ti
 | `aura` | seconds or `{s, color}` | aura only |
 | `beam` | `{to, charge: 0.6, s: 1.0, color, hand: R}` | energy ball charges in the hand for `charge` s BEFORE `t` (the ball grows the whole time, a 2.8 s charge is fine), beam fires at `t` for `s` s at the target's chest (+ flash, sparkles). Add a `knockback` beat on the target ~0.15 s later |
 | `beam` extras | `hands: "both"` | two-hand wave: both arms pulled to one hip during the charge, ball between the hands, both thrust forward at `t` |
-| `beam` extras | `deflect: {after: 0.5, to: [x, y, z], hand: R}` | the target holds the beam on one raised palm (no flinch, no knockback), after `after` s flicks it: the beam bends at his hand and shoots to the world point `to` (studs, default up into the sky) until the beam ends, flash at the hand. Needs `0 < after < s - 0.1` |
+| `beam` extras | `deflect: {after: 0.5, to: [x, y, z], hand: R}` | the target holds the beam on one raised palm (no flinch, no knockback), after `after` s flicks it: the beam bends at his hand and shoots to the world point `to` (studs, default up into the sky) until the beam ends, flash at the hand. `after` must fall INSIDE the frame-quantized beam: with both rounded to whole frames at the scene's fps, `after < s - 2` frames. A `to` closer than 0.5 m to the defender's palm is rejected on the final motion: the build logs an error, no beam is baked, and only the deflect's own palm/head/body keys are undone |
 | `wear` | `lib:<tag>` | puts that accessory on at `t` (instant, like Roblox). Write a `pose` (e.g. `hands_head`) on a beat just before for the gesture |
 | `remove` | `lib:<tag>` | takes it off at `t` |
 | `exclaim` | true | "!" over the head |

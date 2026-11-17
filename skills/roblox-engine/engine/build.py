@@ -2133,7 +2133,8 @@ def build(spec, log):
                     break
             else: log.setdefault('errors', []).append(f"t{b['t']} {b['who']} jump rejected: {hit}")
         if any(k in b for k in FIGHT_KEYS):
-            fight_beat(sc, b, ch, f, fps, cast, face_sched, fallen, settle, vfx_jobs, log)
+            active_walk = fight_walk_span(walk_spans, b['who'], f)
+            fight_beat(sc, b, ch, f, fps, cast, face_sched, fallen, settle, vfx_jobs, log, active_walk=active_walk)
         if 'shoot' in b:   # {"target": name | [x, y] studs, "shots": 1, "every": 0.25, "side": "R", "hit": true}: the gun appears in the hand,
             import guns, vfx   # the arm is up AT t, shots from t + 2 frames (guns.py by Kimi; sound_mix times 'gunshot' the same way)
             sp_ = b['shoot'] if isinstance(b['shoot'], dict) else {'target': b['shoot']}
