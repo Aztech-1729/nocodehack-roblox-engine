@@ -3,34 +3,32 @@
 Every fix to the NoCodeHack Roblox Engine, newest first: what you saw, why it happened, what changed, and how it was tested.
 Found a problem? Open an issue or comment on the video, it lands here.
 
-## 1.12.1 · 2026-11-17 · You can close Roblox Studio after setup
+## 1.12.1 · 2026-11-17
 
-A viewer asked on the video whether Roblox Studio has to stay open once the MCP is set up. It doesn't. Studio is only used
-the first time, to grab the hair, animations and sets. When Claude says setup is done, you can close it. Claude asks you to
-open it again only when it needs something new from Roblox.
+### Fixed
+- Setup no longer stops when Roblox refuses some animations. Part of the animation library comes from a third-party Creator
+  Store pack that Roblox does not let every account load. The engine now lists the refused animations, completes setup, and
+  uses a similar animation in their place in stories (for example, a wave instead of "agree").
 
-We checked the code to be sure: only the setup step talks to Studio. Writing the story, building the scenes, rendering and
-the sound mix all run without it. The README and Claude's instructions now say this too.
+### Added
+- Gunplay: characters can draw and fire a pistol, with muzzle flash, tracer, recoil and gunshot sound.
+- Optional blood and bruise effects.
+- A pastel Miami-style street set with palm trees.
 
-## 1.12.0 · 2026-11-17 · Setup no longer stops on "no permission" animations
+### Changed
+- More natural turns: the head now leads the body.
+- Punch combos no longer show an anime aura unless the story asks for one.
+- Roblox yellow skin keeps its colour in bright daylight scenes.
 
-Thanks to a viewer who reported this on the video: some people saw "no permission" while Claude downloaded the animations,
-and setup never finished.
+### Documentation
+- The README and setup instructions now state that Roblox Studio is only needed while the engine fetches assets from Roblox
+  and can be closed afterwards.
 
-**The cause:** 11 of the 24 animations come from another creator's pack on the Roblox Creator Store, and Roblox refuses a
-few of them on some accounts. Nothing was wrong with your setup, but the engine wanted every animation before it would make
-a Short.
+### Testing
+- Simulated a restricted account by removing two animations: setup reported the library as complete and the substitutes
+  played in a test story. All 63 internal test stories pass the story check.
 
-**Now:** Claude tells you which animations Roblox refused, finishes setup anyway, and your stories use a close stand-in for
-those moves (an "agree" becomes a wave, a tantrum becomes a dance). Nothing stops.
-
-**Also new in this build:** characters can pull out a gun and shoot (muzzle flash, tracer, recoil, gunshot sound), stories
-can add blood and bruises, there is a pastel Miami-style street with palm trees, turns look more natural (the head moves
-first), punch combos no longer get an anime aura unless you ask for one, and Roblox yellow skin stays yellow in bright
-daylight.
-
-**Tested:** we removed two animations from a fresh copy to act like a refused account. Setup counted it as complete, both
-moves played their stand-ins, and all 63 of our test stories still pass the story check.
+Thanks to the community member who reported the animation issue on YouTube.
 
 ## 1.11.1 · 2026-11-15 · Reliability fixes from a community audit (thanks @Aztech-1729)
 
