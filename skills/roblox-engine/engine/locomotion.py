@@ -124,6 +124,8 @@ def walk(sc, root, hips, shoulders, path_points, f_start, speed_studs_s=8, strid
     contact[i] = (side, 'heel'|'toe') for i in 0..N (frame = f_start+i)."""
     fps = sc.render.fps / sc.render.fps_base
     pth = Path(path_points, corner_r)
+    if not (math.isfinite(speed_studs_s) and speed_studs_s > 0):
+        raise ValueError(f'walk speed must be positive and finite, not {speed_studs_s!r}')   # speed: 0 crashed the cadence math
     v = speed_studs_s * S
     w0_nom = RHO * math.sin(math.radians(stride_deg) - DELTA)
     n = 2 * max(1, round((w0_nom + SOLE_Y) * fps / v))

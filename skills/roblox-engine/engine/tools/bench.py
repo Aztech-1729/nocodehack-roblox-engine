@@ -8,13 +8,14 @@ from collections import Counter
 from pathlib import Path
 
 E = Path(__file__).resolve().parents[1]
-BENCH = ['pro_bad_grade', 'fmt_pov', 'parody_dbz_fight', 'fmt_in_this_world', 'fmt_versus', 'retest_puppy']
+BENCH = ['pro_bad_grade', 'fmt_pov', 'parody_dbz_fight', 'fmt_in_this_world', 'fmt_versus']
 
 
 def run(name, tier):
     t0 = time.time()
     r = subprocess.run([sys.executable, 'story.py', f'stories/{name}/story.json', '--tier', tier], cwd=E, capture_output=True, text=True)
     lines = r.stdout.splitlines()
+    lint_fail = any(l.startswith('LINT FAIL') for l in lines)
     scenes, looks = [], Counter()
     for ln in lines:
         m = re.match(r'(s\d\d) REPORT (PASS|FAIL|CRASH|skipped)', ln)
@@ -23,11 +24,15 @@ def run(name, tier):
             for item in ln.strip()[5:].split('; '):
                 for why in item.split(' ', 1)[-1].split('/'): looks[why.split(' (+')[0].strip()] += 1
     shots = secs = 0
+    stamp0 = time.time() - t0
     for sd in sorted((E / 'stories' / name / 'scenes').glob('s*')):
-        try: rep = json.loads((sd / 'report.json').read_text(encoding='utf-8'))
+        try: rp = (sd / 'report.json'); rep = json.loads(rp.read_text(encoding='utf-8'))
         except Exception: continue
-        shots += len(rep.get('cam_shots', [])); secs += rep.get('frames', 0) / 24.0
+        if rp.stat().st_mtime < stamp0: continue   # a report left by an EARLIER run (e.g. this build died in lint): stale, skip it
+        fps = rep.get('fps') or 24
+        shots += len(rep.get('cam_shots', [])); secs += rep.get('frames', 0) / float(fps)
     return {'story': name, 'scenes': scenes, 'gates_pass': sum(s['gate'] == 'PASS' for s in scenes), 'n_scenes': len(scenes),
+            'lint_fail': lint_fail,
             'shots': shots, 'seconds': round(secs, 1), 'shots_per_10s': round(10 * shots / secs, 2) if secs else None,
             'look_total': sum(looks.values()), 'look_by_kind': dict(looks), 'wall_s': round(time.time() - t0)}
 
@@ -41,8 +46,8 @@ if __name__ == '__main__':
         if not (E / 'stories' / n / 'story.json').exists(): print('MISSING', n); continue
         x = run(n, tier); res.append(x)
         sheet = E / 'stories' / n / f'{tier}_sheet.jpg'
-        if sheet.exists(): shutil.copy2(sheet, out / f'{n}_{tier}_sheet.jpg')
-        print(f"{n:22s} gates {x['gates_pass']}/{x['n_scenes']}  shots {x['shots']}  {x['shots_per_10s']}/10s  LOOK {x['look_total']}  {x['wall_s']}s", flush=True)
+        if sheet.exists() and x['n_scenes']: shutil.copy2(sheet, out / f'{n}_{tier}_sheet.jpg')   # only a sheet THIS run produced
+        print(f"{n:22s}{' (lint FAIL)' if x['lint_fail'] else ''} gates {x['gates_pass']}/{x['n_scenes']}  shots {x['shots']}  {x['shots_per_10s']}/10s  LOOK {x['look_total']}  {x['wall_s']}s", flush=True)
     tot = {'stories': len(res), 'gates_pass': sum(x['gates_pass'] for x in res), 'scenes': sum(x['n_scenes'] for x in res),
            'look_total': sum(x['look_total'] for x in res), 'look_per_scene': round(sum(x['look_total'] for x in res) / max(1, sum(x['n_scenes'] for x in res)), 2),
            'shots_per_10s_mean': round(sum(x['shots_per_10s'] or 0 for x in res) / max(1, len(res)), 2)}

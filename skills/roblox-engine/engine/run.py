@@ -59,6 +59,8 @@ def run_planted(sc, ch, path, f_start, speed_studs_s=14, amp_deg=48, bounce_stud
 def run_path(sc, ch, path, f_start, speed_studs_s=14, **kwargs):
     """Build-facing run route; use planted steps for short legs and sharp step-turns."""
     assert math.isfinite(speed_studs_s) and speed_studs_s > 0, 'run speed must be positive and finite'
+    if len(path) < 2:
+        raise ValueError('run path needs at least two points')
     seg = min(math.hypot(b[0] - a[0], b[1] - a[1]) for a, b in zip(path, path[1:]))
     amp = kwargs.pop('amp_deg', 48)
     for cr, am in ((1.0, 1.0), (0.6, 1.0), (1.0, 0.85), (0.6, 0.85), (0.35, 1.0), (0.35, 0.85)):   # same retries as lo.walk_path

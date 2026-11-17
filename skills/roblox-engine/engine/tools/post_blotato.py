@@ -60,6 +60,8 @@ def _open(req):
             return r.status, r.read()
     except urllib.error.HTTPError as e:
         return e.code, e.read()
+    except urllib.error.URLError as e:   # offline / DNS failure used to escape as a raw traceback instead of die()'s message
+        return 599, str(e).encode()
 
 
 def call(method, url, key=None, body=None, raw=None, ctype=None):
@@ -122,6 +124,8 @@ def cmd_post(a):
             die(f"found {len(yt)} YouTube accounts; pass --account <id> (see `accounts`)")
         a.account = str(yt[0]["id"])
     up = call("POST", BASE + "/media/uploads", key, body={"filename": v.name})
+    if not isinstance(up, dict) or not up.get("presignedUrl") or not up.get("publicUrl"):
+        die(f"media upload did not return presignedUrl/publicUrl: {json.dumps(up)[:400]}")
     call("PUT", up["presignedUrl"], raw=v.read_bytes(), ctype=ctype)  # presigned URL: no api-key header
     resp = call("POST", BASE + "/posts", key, body=post_body(a.account, up["publicUrl"], a))
     sub = resp.get("postSubmissionId")

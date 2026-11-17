@@ -22,8 +22,18 @@ def scene_timeline(sc, rep, fps):
     """Resolve one scene: retimed beats/shots (seconds, scene-local) + walk spans. Returns dict."""
     beats = [dict(b) for b in sc.get('beats', [])]; beats.sort(key=lambda b: b['t'])
     shots = [dict(s) for s in sc.get('shots', [])]
-    def retime(t0, who, dl):   # replay one build.py retime_after on the beats/shots
-        i0 = next((i for i, b in enumerate(beats) if b.get('who') == who and abs(b['t'] - t0) < 0.011 and '_own' not in b), None)
+    for b in beats: b['_t0'] = b['t']   # original authored times: repeated retimes of one beat must compare like build.py does
+    def retime(t0, who, dl):   # replay one build.py retime_after on the beats/shots. build.py's predicate: the SAME actor's
+        i0 = next((i for i, b in enumerate(beats) if b.get('who') == who and abs(b['_t0'] - t0) < 0.011), None)   # beats at/after
+        if i0 is None: return                                                        # t0 move (inclusive), others strictly after it.
+        beats[i0]['_own'] = beats[i0].get('_own', 0) + dl   # the retimed action ITSELF finishes dl later (a give/turn/grab's own SFX)
+        if 'grab' in beats[i0] and 'until' in beats[i0]['grab']:                     # The build shifts a grab's release time too;
+            beats[i0]['grab']['until'] = round(beats[i0]['grab']['until'] + dl, 3)   # without this the place SFX drifts.
+        for b in beats[i0 + 1:]:
+            if (b.get('who') == who and b['_t0'] >= t0 - 1e-6) or b['_t0'] > t0 + 1e-6: b['t'] = round(b['t'] + dl, 3)
+        for s in shots:
+            if s['t'] > t0 + 1e-6: s['t'] = round(s['t'] + dl, 3)
+            elif s['t'] > t0 - 1e-6: s['t'] = round(s['t'] + max(0.0, dl - 0.6), 3)
         if i0 is None: return
         beats[i0]['_own'] = dl
         for b in beats[i0 + 1:]:
@@ -32,7 +42,7 @@ def scene_timeline(sc, rep, fps):
             if s['t'] > t0 + 1e-6: s['t'] = round(s['t'] + dl, 3)
             elif s['t'] > t0 - 1e-6: s['t'] = round(s['t'] + max(0.0, dl - 0.6), 3)
     def settle_wait(t0, who, dl):
-        b = next((b for b in beats if b.get('who') == who and abs(b['t'] - t0) < 0.011 and '_wait' not in b), None)
+        b = next((b for b in beats if b.get('who') == who and abs(b['_t0'] - t0) < 0.011 and '_wait' not in b), None)
         if b: b['_wait'] = dl
     if rep.get('timeline_events'):   # machine-readable twins of the notes, in build order (can't drift with wording)
         for e in rep['timeline_events']: (retime if e['kind'] == 'retime' else settle_wait)(float(e['t']), e['who'], float(e['dl']))
@@ -49,6 +59,7 @@ def walk_spans(beats, rep, pos, fps):
     """[(who, t0, t1, run)] for every walk/sit-route: report walks win, else dist/speed. Also sets b['_eff']."""
     rw = {}
     for w in rep.get('walks', []): rw.setdefault(w['who'], []).append((w['f0'] / fps, w['f1'] / fps))
+    rejected = {(float(m[1]), m[2]) for m in re.finditer(r't([\d.]+) (\S+) walk rejected', '\n'.join(rep.get('notes', [])))}
     spans = []
     for k, b in enumerate(beats):
         b['_eff'] = b['t'] + (b.get('_own', 0) if ('give' in b or 'turn' in b or 'grab' in b) else 0) + b.get('_wait', 0)
@@ -58,6 +69,7 @@ def walk_spans(beats, rep, pos, fps):
                 t0, t1 = rw[w].pop(0)
             else:
                 if 'walk' not in b: continue
+                if (round(b['_t0'], 3), w) in rejected: continue   # the engine REJECTED this walk: no motion, no footsteps
                 tgt = b['walk'] if isinstance(b['walk'], list) else [b['walk']]
                 p, d = pos.get(w, (0, 0)), 0.0
                 for e in tgt:
@@ -103,15 +115,17 @@ def extract_events(story, sdir, seed=1):
                     add(off + t, 'step_' + floor, w, (0.62 if run else 0.5) * edge * db(rng.uniform(-2.5, 1.5))); last_step = off + t
                 t += iv * rng.uniform(0.9, 1.1); n += 1
             if run and t1 - t0 > 0.5: add(off + t0, 'whoosh', w, 0.35)
-        sits = {s[0]: s for s in rep.get('sit_spans', [])}
+        sit_spans_ = rep.get('sit_spans', [])
         wend = lambda b: b.get('_walk_end', b['_eff'])
         prev_end = {}
         for k, b in enumerate(beats):
             w, t = b.get('who', ''), b['_eff']
-            for sp in spans:   # an actor's next action waits for its walk to finish (engine behaviour)
-                if sp[0] == w and sp[1] - 0.2 <= b['t'] < sp[2] and 'walk' not in b and 'sit' not in b: t = max(t, sp[2])
+            for sp in spans:   # an actor's next ACTION waits for its walk to finish (build settles give/throw/turn/jump/grab/sit
+                if sp[0] == w and sp[1] - 0.2 <= b['t'] < sp[2] and any(k in b for k in ('give', 'throw', 'turn', 'jump', 'grab')):
+                    t = max(t, sp[2])   # only those; a talk/face/pose beat is keyed AT its frame, so its voice must not drift
             if 'sit' in b:
-                s = sits.get(w); ts = s[1] / fps if s and s[1] / fps < frames / fps else wend(b) + 0.3
+                s = min((sp for sp in sit_spans_ if sp[0] == w), key=lambda sp: abs(sp[1] * fps - b['_t0']), default=None)   # the sit THIS
+                ts = s[1] / fps if s and s[1] / fps < frames / fps else wend(b) + 0.3                                          # beat sat on (not the actor's last)
                 add(off + ts, 'creak', w, 0.8)
                 if s and s[2] / fps < frames / fps - 0.1: add(off + s[2] / fps, 'creak', w, 0.5)
             if b.get('stand'): add(off + t, 'creak', w, 0.6); add(off + t, 'cloth', w, 0.35)
@@ -188,7 +202,7 @@ def pick(kind, rng):
     fs = sorted(glob.glob(os.path.join(ROOT, 'assets', 'sfx', d, (stem or '*') + '*.ogg')))
     mine = sorted(f for e_ in ('ogg', 'mp3', 'wav') for f in glob.glob(os.path.join(ROOT, 'assets', 'sfx', d, 'mine', '*.' + e_)))   # the creator's own picks (chosen by ear) replace the library for that kind
     if mine and not stem: fs = mine
-    return fs[rng.randrange(len(fs))]
+    return fs[rng.randrange(len(fs))] if fs else None   # an empty folder (a user sfx dir with no .ogg) skipped the mix, not crashed it
 
 
 def blips(dur, who, rng_seed):
@@ -221,7 +235,9 @@ def mix(story_events, talks, total, mood, voice=True, music=True, seed=1, duck_d
     talkmask = np.zeros(N)
     for tk in talks: talkmask[int(tk['t'] * SR):int((tk['t'] + tk['dur']) * SR)] = 1
     for e in story_events:
-        x = load(pick(e['kind'], rng)).copy(); i = int(e['t'] * SR); under = i < N and talkmask[min(i, N - 1)] > 0
+        p_ = pick(e['kind'], rng)
+        if not p_: print(f"sfx: no sound file for '{e['kind']}' -> skipped"); continue
+        x = load(p_).copy(); i = int(e['t'] * SR); under = i < N and talkmask[min(i, N - 1)] > 0
         g = {'crash': 1.0, 'punch': 1.0, 'beam': 1.0, 'charge': .7, 'aura': .55, 'dash': .6, 'deflect': .7, 'screech': .8, 'step_wood': .55, 'step_grass': .55, 'step_concrete': .55, 'whoosh': .5, 'pop': .6, 'boing': .5, 'zap': .4, 'power': .4}.get(e['kind'], .8) * e['vol']
         if e['kind'].startswith('step') and under: g *= db(-4.5)
         elif under: g *= db(-2)
@@ -309,10 +325,12 @@ def ass(talks, path, story=None):
             d = tk['dur'] * len(c) / tw
             cards.append([t, t + d, c.upper(), st]); t += d
     cards.sort(key=lambda c: c[0]); lines = []
+    def ass_text(s):   # { } start override blocks and a \ is their escape: plain caption text must not be parsed as tags
+        return re.sub(r'[{}\\]', ' ', str(s)).replace('\n', ' ').replace('\r', ' ')
     for i, (t0, t1, c, st) in enumerate(cards):   # ONE card at a time: overlapping lines stacked two cards ("CHEY!!GETE!", R212b)
         if i + 1 < len(cards): t1 = min(t1, cards[i + 1][0])
         if t1 - t0 < (0.08 if st == 'Word' else 0.2): continue   # a cut-off card flashing for a few frames reads as a glitch
-        lines.append(f"Dialogue: 0,{ts(t0)},{ts(t1)},{st},,0,0,0,,{{\\fad(40,0)\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)}}{c}")
+        lines.append(f"Dialogue: 0,{ts(t0)},{ts(t1)},{st},,0,0,0,,{{\\fad(40,0)\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)}}{ass_text(c)}")
     if story.get('header') or story.get('cards') or story.get('hud') or FREEZES: lines += overlays.extra_events(story, SCENE_OFFS, FREEZES)
     with open(path, 'w', encoding='utf-8') as f_: f_.write(h + '\n'.join(lines) + '\n')
     return len(lines)
@@ -324,7 +342,11 @@ VIDEOS = ('hq.mp4', 'mid.mp4', 'preview.mp4', 'draft.mp4')   # default video: th
 
 
 def probe_fps(video):
-    n, _, d = subprocess.run(['ffprobe', '-v', 'error', '-select_streams', 'v', '-show_entries', 'stream=r_frame_rate', '-of', 'csv=p=0', video], capture_output=True, text=True).stdout.strip().partition('/')
+    out = subprocess.run(['ffprobe', '-v', 'error', '-select_streams', 'v', '-show_entries', 'stream=r_frame_rate', '-of', 'csv=p=0', video],
+                         capture_output=True, text=True).stdout.strip().partition('/')
+    n, d = out[0], out[2]
+    try: return float(n) / float(d or 1)
+    except (ValueError, ZeroDivisionError): return 24.0   # a wav-only run or a missing stream: the default fps, not a traceback
     return float(n) / float(d or 1)
 
 

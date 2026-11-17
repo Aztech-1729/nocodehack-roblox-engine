@@ -198,7 +198,7 @@ def _ring_flash_v1(sc, point, axis, frame, size=1.0, color='#FFFFFF'):
         o.rotation_euler = ax.to_track_quat('Z', 'Y').to_euler(); _life(o, frame, frame + 9); objects.append(o)
         for f, s in ((frame, r0 * size), (frame + 3, (r0 + r1) / 2 * size), (frame + 9, r1 * size * 1.15)):
             _key(o, 'location', f, point); _key(o, 'scale', f, (s, s, s * (1 if f < frame + 9 else .01)))
-    objects += impact_flash(sc, point, frame, '#FFFFFF', size=1.6 * size)
+    objects += impact_flash(sc, point, frame, '#FFFFFF', size=.8 * size)   # matches the v2 path (was 1.6: a 2x A/B discrepancy)
     return objects
 
 
@@ -297,13 +297,15 @@ def _sprite_material(tex_id, color, strength=3.0, alpha_k=1.0, mode='add', soft=
     m = bpy.data.materials.get(name)
     if m:
         return m
-    rgb = _material(color).diffuse_color[:3]
+    path = AURA_DIR / f'{tex_id}.png'
+    if not (path.exists() or (KENNEY / f'{tex_id}.png').exists()):
+        return _material(color)   # a partial sprite pack: flat colour, not a crash. Checked BEFORE creating the cache entry:
+    rgb = _material(color).diffuse_color[:3]   # an empty material cached under this name would make every later hit invisible
     m = bpy.data.materials.new(name); m.use_nodes = True; nt = m.node_tree
     for n_ in list(nt.nodes):
         if n_.type != 'OUTPUT_MATERIAL': nt.nodes.remove(n_)
     out = next(n_ for n_ in nt.nodes if n_.type == 'OUTPUT_MATERIAL')
-    tex = nt.nodes.new('ShaderNodeTexImage'); path = AURA_DIR / f'{tex_id}.png'
-    if not (path.exists() or (KENNEY / f'{tex_id}.png').exists()): return _material(color)   # a partial sprite pack: flat colour, not a crash
+    tex = nt.nodes.new('ShaderNodeTexImage')
     tex.image = bpy.data.images.load(str(path if path.exists() else KENNEY / f'{tex_id}.png'), check_existing=True)
     tint = nt.nodes.new('ShaderNodeMix'); tint.data_type = 'RGBA'; tint.blend_type = 'MULTIPLY'; tint.inputs['Factor'].default_value = 1.0
     nt.links.new(tex.outputs['Color'], tint.inputs['A']); tint.inputs['B'].default_value = (*rgb, 1)
@@ -503,7 +505,8 @@ def window_dust(sc, info):
 
 def weather(sc, info, kind='none'):
     """Set weather=snow|rain: sparse, shared meshes and baked linear fall, without simulation or volumes."""
-    if kind not in ('none', 'snow', 'rain'): raise ValueError('weather must be none, snow or rain')
+    kind = str(kind).lower()   # writers guess 'Snow'/'RAIN'; an unknown value degrades to clear sky instead of killing the build
+    if kind not in ('none', 'snow', 'rain'): return []
     if kind == 'none' or not info.get('outdoor'): return []
     prefix = 'VFX weather ' + kind
     existing = [o for o in sc.objects if o.name.startswith(prefix)]

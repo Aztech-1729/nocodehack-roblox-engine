@@ -12,7 +12,9 @@ sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from hair_fetch import mesh_to_obj, OUT
 
-RBX = Path(os.environ['LOCALAPPDATA']) / 'Roblox'
+# Studio's cache lives under %LOCALAPPDATA% (Windows). macOS/Linux have no such var: fall back to the equivalent path and let
+# log_rows' "no Roblox Studio logs found" fire, instead of a KeyError at import time (collect hair imports this module).
+RBX = Path(os.environ.get('LOCALAPPDATA') or Path.home() / 'AppData' / 'Local') / 'Roblox'
 SIGS = {b'version ': 'mesh', b'\xabKTX 20': 'ktx', b'\x89PNG': 'png'}
 BC = {131: 'bc1', 132: 'bc1', 133: 'bc1', 134: 'bc1', 135: 'bc2', 136: 'bc2', 137: 'bc3', 138: 'bc3', 145: 'bc7', 146: 'bc7'}
 

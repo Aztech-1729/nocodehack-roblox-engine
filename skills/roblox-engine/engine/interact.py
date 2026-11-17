@@ -394,7 +394,9 @@ def depenetrate(sc, pivot, props, frames, box_props=(), tol=0.03, ctol=0.04, max
                         best = (rx, ry, rz_); break
                 if best: break
             if best:
-                _key(pivot, 'rotation_euler', f, best); fixed.append(f); changed += 1
+                _key(pivot, 'rotation_euler', f, best)
+                LAST_POSE[pivot.name] = tuple(math.degrees(a) for a in best)   # continuity must not re-pick the pose we just pushed out
+                fixed.append(f); changed += 1
             else:
                 failed.append(f)
         print('DEPEN', label or pivot.name, 'pass fixed', changed)
@@ -667,7 +669,8 @@ def hold_clear(sc, pivot, side, prop, frames, local_center_studs, radius_studs, 
     for f in frames:
         PW, T = _pivot_frame(sc, pivot, f)
         P = (PW @ T).translation; M = prop.matrix_world.copy(); cW = M @ lc
-        pts = np.concatenate([np.array([(o.matrix_world @ v.co)[:] for v in o.data.vertices]) for o in clear_objs])
+        pts = (np.concatenate([np.array([(o.matrix_world @ v.co)[:] for v in o.data.vertices]) for o in clear_objs])
+               if clear_objs else np.zeros((0, 3)))
         def try_target(q):
             rx, ry, rz, e = aim_tip(sc, pivot, side, f, q, with_rz=True)
             return rx, ry, rz, e, _arm_depth_for(pivot, side, PW, T, rx, ry, rz, pts)

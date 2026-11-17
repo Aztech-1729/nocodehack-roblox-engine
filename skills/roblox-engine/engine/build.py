@@ -368,14 +368,15 @@ def grab_geom(pr):
     """How a hand grabs this prop: (centre xy, radius, z_lo, z_hi, standoff). Flat props (< 0.3 m tall: cookie, phone, book) are
     grabbed from ON TOP near the middle (reads as a grab); taller ones on the rim/side just under the top."""
     c, rad, top = prop_cyl(pr)
-    base_z = min((o.matrix_world @ Vector(cc)).z for o in pr.children_recursive if o.type == 'MESH' for cc in o.bound_box)
+    base_z = min((o.matrix_world @ Vector(cc)).z for o in [pr] + list(pr.children_recursive) if o.type == 'MESH' for cc in o.bound_box)
     if top - base_z < 0.3: return c, rad * 0.35, top + 0.18, top + 0.26, False   # arm block is 1 stud thick: its lower edge ~0.2 m under the hand point
     return c, rad, top - 0.12, top + 0.03, True
 
 
 def prop_cyl(pr):
-    """(centre xy, rim radius, top z) of a prop from its mesh bounds, world metres."""
-    pts = [o.matrix_world @ Vector(c) for o in pr.children_recursive if o.type == 'MESH' for c in o.bound_box]
+    """(centre xy, rim radius, top z) of a prop from its mesh bounds, world metres. A creature subject IS one leaf mesh: include
+    the object itself or max() runs on an empty list and the build dies (walking to / grabbing a creature by name)."""
+    pts = [o.matrix_world @ Vector(c) for o in [pr] + list(pr.children_recursive) if o.type == 'MESH' for c in o.bound_box]
     c0 = pr.matrix_world.translation
     return (c0.x, c0.y), max(math.hypot(p.x - c0.x, p.y - c0.y) for p in pts), max(p.z for p in pts)
 
@@ -488,7 +489,8 @@ def throw_bake(sc, th, n, fps, log):
         tor = th['target'].torso.matrix_world.translation; d = (p0.xy - tor.xy).normalized()
         p1 = Vector((tor.x + d.x * (0.27 + th['rad']), tor.y + d.y * (0.27 + th['rad']), tor.z - base - half))
     elif th['kind'] == 'hit_prop':
-        tp = th['target']; tms = [o for o in tp.children_recursive if o.type == 'MESH']
+        tp = th['target']; tms = [o for o in tp.children_recursive if o.type == 'MESH'] or ([tp] if tp.type == 'MESH' else [])
+        # a creature subject IS a leaf mesh (no children): throw AT it hits its biggest mesh instead of dividing by zero
         pts = [o.matrix_world @ Vector(c) for o in tms for c in o.bound_box]; c = sum(pts, Vector()) / len(pts)
         d = (p0.xy - c.xy).normalized(); trad = max((q.xy - c.xy).length for q in pts) * 0.7
         p1 = Vector((c.x + d.x * (trad + th['rad']), c.y + d.y * (trad + th['rad']), c.z - base - half))
@@ -1094,6 +1096,27 @@ def build(spec, log):
         import creatures
         try:
             root_, subj_ = creatures.make(c_); creatures.animate(root_, c_, fps, log, sc.frame_end); props[c_['name']] = subj_
+            # REGISTER THE FOOTPRINT: creature meshes are excluded from the collision World (their frame-0 pose went stale the
+            # moment they moved), so walks, knockbacks and the body gate need the rect explicitly. Without it a knockback landed
+            # straight through a watching ogre and failed the whole-body gate. Static creatures: the placed rect; movers: the
+            # rect at the LAST path point (where every late interaction happens).
+            ms_ = [o for o in [root_] + list(root_.children_recursive) if o.type == 'MESH']
+            end_ = (c_.get('path') or [{}])[-1]
+            if c_.get('path'):
+                px_, py_ = end_.get('at', c_.get('at', [0, 0]))
+                pz_ = end_.get('z', 0)
+            else:
+                px_, py_ = c_.get('at', [0, 0]); pz_ = 0
+            bpy.context.view_layer.update()
+            pts_ = [o.matrix_world @ Vector(cc) for o in ms_ for cc in o.bound_box]
+            if pts_:
+                import assets as _assets
+                dx_, dy_ = (px_ * S - root_.location.x, py_ * S - root_.location.y) if c_.get('path') else (0.0, 0.0)
+                x0_, x1_ = min(p_.x for p_ in pts_) + dx_, max(p_.x for p_ in pts_) + dx_
+                y0_, y1_ = min(p_.y for p_ in pts_) + dy_, max(p_.y for p_ in pts_) + dy_
+                top_ = max(p_.z for p_ in pts_) + pz_ * S
+                _assets.PLACED.append({'name': c_['name'], 'pivot': root_, 'rect': (x0_, x1_, y0_, y1_), 'top': top_, 'solid': True})
+                st.setdefault('obstacles', []).append((x0_, x1_, y0_, y1_, top_))
         except (KeyError, ImportError, FileNotFoundError) as e: log.setdefault('errors', []).append(f"creature {c_.get('name')}: {e}")
     bpy.context.view_layer.update()
     # PROP SHAKE (story key props[].shake = [seconds]): the prop jolts ~0.5 s - something alive inside a box, a buzzing phone,
@@ -1188,7 +1211,7 @@ def build(spec, log):
             if k_ not in spans_of: spans_of[k_] = tight_spans(route, obs_r)
             return spans_of[k_]
         for el in wl:
-            if isinstance(el, str) and el in props:
+            if isinstance(el, str) and el in props and props[el].get('kind') != 'creature':
                 hand = b.get('hand') or next((x['grab'].get('hand', 'R') for x in beats if x['who'] == who and x['t'] >= b['t']
                                               and isinstance(x.get('grab'), dict) and x['grab']['prop'] == el), 'R')
                 c, rad_g, zl, zh, so = grab_geom(props[el])
@@ -1345,6 +1368,9 @@ def build(spec, log):
                 if not side and abs((y_path - y_cur + math.pi) % (2 * math.pi) - math.pi) > math.radians(30):
                     start = lo.step_to(sc, ch, route[0], start, goal_yaw=y_path, step_deg=lo.TURN_STEP_DEG)   # 180 deg = 3 steps, not 6
                 spd = b.get('speed', 9.5)   # reference characters move briskly
+                if not (isinstance(spd, (int, float)) and not isinstance(spd, bool) and math.isfinite(spd)):
+                    spd = 9.5   # a malformed speed: the etas clamp it (speed: 0 divided by them once) but the BAKE divided by it too
+                else: spd = max(spd, 0.1)
                 def go(rt, f0_):
                     if b.get('run') or spd >= 10:   # RUN: flight phase, no planted-foot constraint (walk() skates at running speed)
                         # through lo.walk_path: the same retries, and the L1 step-and-turn fallback instead of run.py's 35 deg shuffle turns
@@ -1738,6 +1764,10 @@ def build(spec, log):
             r = ch.root; f_ = max(f, settle.get(b['who'], 0)); sc.frame_set(f_ - 2)
             if 'fall' in b:
                 back = -1 if b.get('fall') != 'forward' else 1
+                if b['who'] in seated:   # FALL FROM A SEAT: the stale entry keyed a later 'stand' onto the chair while the body lay
+                    seated.pop(b['who']); seat_back.pop(b['who'], None)   # wherever it fell, and kept the sitter seat-exempt from
+                    for sp_ in log.get('sit_spans', []):                  # the body gate for the rest of the scene
+                        if sp_[0] == b['who'] and sp_[2] > n: sp_[2] = f_
                 origin_ = tuple(r.location.xy); yaw_ = r.rotation_euler.z
                 # Trials include planted restaging steps; restore every animated object so rejected trials leave no keys.
                 objs_ = [ch.root] + list(ch.root.children_recursive)
@@ -2139,12 +2169,38 @@ def build(spec, log):
             import guns, vfx   # the arm is up AT t, shots from t + 2 frames (guns.py by Kimi; sound_mix times 'gunshot' the same way)
             sp_ = b['shoot'] if isinstance(b['shoot'], dict) else {'target': b['shoot']}
             tg_, side_ = sp_.get('target'), sp_.get('side', 'R'); sc.frame_set(f); bpy.context.view_layer.update()
-            tch_ = cast.get(tg_) if isinstance(tg_, str) else None
-            if isinstance(tg_, str) and tch_ is None and tg_ not in props: log.setdefault('errors', []).append(f"t{b['t']} {b['who']} shoot: unknown target {tg_!r}")
+            # VALIDATE first: a malformed shoot hard-crashed the build (bool target subscripted, shots uncapped, side KeyError)
+            # while lint only knew the key names. Same contract as fight.story_beat: report in log['errors'], never crash.
+            n_s0, ev_0 = sp_.get('shots', 1), sp_.get('every', .25)
+            bad_ = None
+            if isinstance(tg_, str):
+                if tg_ not in cast and tg_ not in props: bad_ = f"target {tg_!r} is not in the cast or props of this scene"
+            elif isinstance(tg_, (list, tuple)) and len(tg_) == 2 and all(isinstance(v_, (int, float)) and not isinstance(v_, bool) and math.isfinite(v_) for v_ in tg_):
+                pass
+            else: bad_ = f"target must be a name or [x, y] studs, not {tg_!r}"
+            if bad_ is None and side_ not in ('R', 'L'): bad_ = f"side must be R or L, not {side_!r}"
+            if bad_ is None and (not isinstance(n_s0, (int, float)) or isinstance(n_s0, bool) or not math.isfinite(n_s0) or n_s0 < 1):
+                bad_ = f"shots must be a number >= 1, not {n_s0!r}"
+            if bad_ is None and (not isinstance(ev_0, (int, float)) or isinstance(ev_0, bool) or not math.isfinite(ev_0) or ev_0 < 0):
+                bad_ = f"every must be a number of seconds >= 0, not {ev_0!r}"
+            if bad_:
+                log.setdefault('errors', []).append(f"t{b['t']} {b['who']} shoot: {bad_}")
             else:
+                tch_ = cast.get(tg_) if isinstance(tg_, str) else None
                 tp_ = (tch_.torso.matrix_world.translation.copy() if tch_ else target_of(tg_).matrix_world.translation.copy()) if isinstance(tg_, str) else Vector((tg_[0] * S, tg_[1] * S, 3 * S))
-                n_s = max(1, int(sp_.get('shots', 1))); ev_ = max(3, F(sp_.get('every', .25), fps)); shots_ = [f + 2 + i * ev_ for i in range(n_s)]
+                n_s = min(24, max(1, int(n_s0))); ev_ = max(3, F(ev_0, fps)); shots_ = [f + 2 + i * ev_ for i in range(n_s)]
+                if shots_[-1] + 14 > n - 1:   # late shots were keyed past frame_end and logged anyway: lengthen like a throw does
+                    n = retime_after(b, shots_[-1] + 14 - (n - 1), 'shoot')
+                # A walk keys root/hips/arms EVERY frame: hold it and clear its keys through the walk's own end (the knockback rule),
+                # for the shooter AND a walking hit target (otherwise the aim/recoil/jolt fight the swing for every frame).
+                aw_ = fight_walk_span(walk_spans, b['who'], f)
+                if aw_:
+                    lo._hold(ch, f - 1); lo._hold(ch, f); lo.clear_keys([ch.root] + list(ch.hips) + list(ch.arms_piv) + [ch.upper], f + 1, aw_[1])
+                tw_ = fight_walk_span(walk_spans, tch_.name, f) if tch_ is not None and sp_.get('hit', True) else None
+                if tw_:
+                    lo._hold(tch_, f - 1); lo._hold(tch_, f); lo.clear_keys([tch_.root] + list(tch_.hips) + list(tch_.arms_piv) + [tch_.upper], f + 1, tw_[1])
                 gun_ = guns.make_pistol(f"{b['who']} pistol {f}"); guns.hold(ch, gun_, side_); gun_.scale = (1.5, 1.5, 1.5)   # Roblox tool size (~0.8 stud)
+                prop_meshes += [o for o in gun_.children_recursive if o.type == 'MESH'] or ([gun_] if gun_.type == 'MESH' else [])   # the barrel joins the gates
                 guns.show(gun_, f - 8, shots_[-1] + 14); guns.aim(sc, ch, tp_, f, shots_[-1] + 6, side_)
                 for fs_ in shots_:
                     def shot_job(fs_=fs_, g_=gun_, tp_=tp_, ch_=ch, side_=side_):   # a vfx job returns the objects it made (renamed 'VFX ...')
@@ -2230,30 +2286,39 @@ def build(spec, log):
         if 'grab' in b:
             g = b['grab']; hand = g.get('hand', 'R'); side = rig.SIDE[hand]; piv = ch.arm[hand]
             pr = props[g['prop']]
-            sc.frame_set(f); bpy.context.view_layer.update()
-            c, rad, top = prop_cyl(pr)
-            fg = max(f, settle.get(b['who'], 0))
-            for attempt in (0, 1):
-                lean = lean_for.pop(b['who'], 0)
-                nxt = next((x for x in beats if x['who'] == b['who'] and x['t'] > b['t'] and 'pose' in x), None)
-                lift = nxt is None or F(nxt['t'] - b['t'], fps) > F(.5, fps)
-                end, hit = grab_candidate(sc, world, ch, pr, hand, fg, lean, lift=lift, spans=log.get('sit_spans', []))
-                if end is not None:
-                    if fg > f:   # RETIME: the grab waited for the approach -> push every later beat/shot back, lengthen the scene
-                        if 'until' in g: g['until'] = round(g['until'] + (fg - f) / fps, 3)
-                        n = retime_after(b, fg - f, f"grab {g['prop']}")
-                    fu = F(g['until'], fps) if 'until' in g else n - 1
-                    fu = max(fu, fg + F(0.25, fps))   # 'until' earlier than the acquire frame (or pushed back by a retime) tripped gr.grab's assert
-                    if fu >= n - 1 - F(0.5, fps): fu = END   # releasing in the last 0.5 s = keep holding (no mid-air prop at the end)
-                    grabs.append((piv, side, pr, fg, fu))
-                    settle[b['who']] = end
-                    break
+            fg0_ = max(f, settle.get(b['who'], 0))
+            held_ = next((e_ for e_ in grabs if e_[2] is pr and e_[3] <= fg0_ and (e_[4] >= fg0_ or e_[4] == END)), None)
+            if held_ is not None:   # a second grab of a held prop duplicated the grabs entry: the bake then re-keyed the prop
+                if held_[0] is piv:  # under a new window and gr.grab's release assert killed the whole build
+                    log.setdefault('notes', []).append(f"t{b['t']} {b['who']} grab {g['prop']}: already holding it -> hold kept")
                 else:
-                    if attempt == 0:   # out of reach: walk to the nearest clear spot first, grab on arrival
-                        fe = walk_to(ch, b['who'], [g['prop']], fg, {'t': b['t'], 'hand': hand, 'speed': b.get('speed', 8)}, beats)
-                        if fe is not None: fg = fe; continue
-                    log.setdefault('errors', []).append(f"t{b['t']} {b['who']} grab {g['prop']} rejected: {hit}")
-                    break
+                    log.setdefault('errors', []).append(f"t{b['t']} {b['who']} grab {g['prop']}: another character is holding it -> give it first")
+                pr = None
+            if pr is not None:
+                sc.frame_set(f); bpy.context.view_layer.update()
+                c, rad, top = prop_cyl(pr)
+                fg = max(f, settle.get(b['who'], 0))
+                for attempt in (0, 1):
+                    lean = lean_for.pop(b['who'], 0)
+                    nxt = next((x for x in beats if x['who'] == b['who'] and x['t'] > b['t'] and 'pose' in x), None)
+                    lift = nxt is None or F(nxt['t'] - b['t'], fps) > F(.5, fps)
+                    end, hit = grab_candidate(sc, world, ch, pr, hand, fg, lean, lift=lift, spans=log.get('sit_spans', []))
+                    if end is not None:
+                        if fg > f:   # RETIME: the grab waited for the approach -> push every later beat/shot back, lengthen the scene
+                            if 'until' in g: g['until'] = round(g['until'] + (fg - f) / fps, 3)
+                            n = retime_after(b, fg - f, f"grab {g['prop']}")
+                        fu = F(g['until'], fps) if 'until' in g else n - 1
+                        fu = max(fu, fg + F(0.25, fps))   # 'until' earlier than the acquire frame (or pushed back by a retime) tripped gr.grab's assert
+                        if fu >= n - 1 - F(0.5, fps): fu = END   # releasing in the last 0.5 s = keep holding (no mid-air prop at the end)
+                        grabs.append((piv, side, pr, fg, fu))
+                        settle[b['who']] = end
+                        break
+                    else:
+                        if attempt == 0:   # out of reach: walk to the nearest clear spot first, grab on arrival
+                            fe = walk_to(ch, b['who'], [g['prop']], fg, {'t': b['t'], 'hand': hand, 'speed': b.get('speed', 8)}, beats)
+                            if fe is not None: fg = fe; continue
+                        log.setdefault('errors', []).append(f"t{b['t']} {b['who']} grab {g['prop']} rejected: {hit}")
+                        break
     # relaxed holds: a raised arm held > 1.2 s eases ~22 % toward rest (reference holds breathe; frozen raised arms read robotic)
     held_arms = [(piv, f0_, f1_) for piv, side, pr, f0_, f1_ in grabs]
     for who, ch in cast.items():
@@ -2367,7 +2432,10 @@ def build(spec, log):
             th_ = next((t_ for t_ in THROWS if t_['prop'] is pr and t_['f_rel'] == f1), None)
             if th_ is not None: throw_bake(sc, th_, n, fps, log)
             elif f1 < n - 1 and hold_window(grabs, pr, f0, f1)[1] == f1:
-                drop_prop(sc, pr, f1, n, fps, log)
+                nxt_ = min((g2[3] for g2 in grabs if g2[2] is pr and g2[3] > f1), default=None)   # a re-grab within the drop's fall
+                if nxt_ is None or nxt_ >= f1 + 24:   # window (~23 frames): its keys would pass the new acquire frame and kill
+                    drop_prop(sc, pr, f1, n, fps, log)   # gr.grab's release assert. Skip the fall; the prop freezes at the hand
+                else: log.setdefault('notes', []).append(f'{pr.name}: released straight into the next grab (no drop arc)')
     grabbed = {id(pr): pr for _, _, pr, _, _ in grabs}
     rest = _rest0
     bake_props()   # cleanup and the final bake must see the same ordinary-release trajectory
@@ -2505,7 +2573,9 @@ def build(spec, log):
             log.setdefault('notes', []).append(f"cut at {x['t']}s moved onto {who_}'s fall (f{c_})"); x['t'] = round(c_ / fps, 3)
     # cam2 LANDING SHOT: a knocked-back / fallen body that has landed (measured on the final motion) and stays down >= 1 s gets a
     # straight-down view of the whole body + crater (other bodies lying within 8 studs join the frame). Scene switch: falls.
-    camera.CRATER.clear(); camera.CRATER.update({w_: fight.CURL_CRATER for w_ in log.get('curled', {})})   # the crater VFX is built after the cameras
+    camera.CRATER.clear()
+    camera.CRATER.update({**log.get('craters', {}), **{w_: fight.CURL_CRATER for w_ in log.get('curled', {})}})   # crater radii for the
+    # landing top-down's fit (curled wins); the VFX itself is built after the cameras, so fight logs the radius at queue time
     for who_, a_, _z, _d in sorted(log.get('fall_spans', []), key=lambda x_: x_[1]) if spec.get('falls', True) else []:
         if who_ not in cast or a_ <= 0: continue   # a body lying from the scene start (down) joins another body's landing shot, it gets none of its own
         fl_ = camera.landed(sc, cast[who_], a_, n - 1)

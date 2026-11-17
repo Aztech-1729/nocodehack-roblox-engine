@@ -35,7 +35,11 @@ def main():
         have = p.exists() and (p.is_file() or any(p.iterdir()))
         if rel == 'assets/r6_parts.blend':
             check(have, f'{what} ({rel})', 'optional: authentic head mesh, see tools/fetch_library.py status', required=False)
-        else:   # Roblox libraries are required: they come from the user's Roblox Studio (tools/fetch_library.py)
+        elif rel in ('assets/anims', 'assets/rbxsets'):
+            # Roblox refuses some downloads per account (1.12.1) and the engine degrades gracefully: stories play a stand-in
+            # clip and rbx presets/creature models are the only users of rbxsets. Warn, never block the whole machine.
+            check(have, f'{what} ({rel})', 'optional: Roblox refused it on some accounts; stories degrade gracefully, see tools/fetch_library.py status', required=False)
+        else:   # hair/faces/clothes are required: they come from the user's Roblox Studio (tools/fetch_library.py)
             check(have, f'{what} ({rel})', 'run python tools/fetch_library.py status, then public + the Roblox Studio jobs')
     print('READY' if not bad else f'NOT READY: {len(bad)} missing')
     return 1 if bad else 0

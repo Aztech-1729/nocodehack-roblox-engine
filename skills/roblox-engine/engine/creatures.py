@@ -27,7 +27,9 @@ def moves(c):
         import json, os, sets
         try: f = os.path.join(sets.rbx_dir(kind[4:]), 'creature.json')
         except KeyError: return None
-        return json.load(open(f, encoding='utf-8')).get('moves') if os.path.exists(f) else None
+        if not os.path.exists(f): return None
+        try: return json.load(open(f, encoding='utf-8')).get('moves')   # a truncated/hand-edited file degrades to 'path only'
+        except (OSError, ValueError, AttributeError): return None       # (the build must not die on saved data it wrote itself)
     return DEFAULT.get(kind)
 
 
@@ -90,9 +92,17 @@ def animate(root, c, fps, log, f_end=None):
     elif c.get('flap') or c.get('roar'):
         notes.append(f"{c['name']}: flap/roar need the part-built dragon (other kinds have no wings or jaw)")
     if not part_built and c.get('hover'):   # a whole-model bob for Creator Store models
-        a, b = F(c['hover'][0]), F(c['hover'][1]); z0 = root.location.z
+        a, b = F(c['hover'][0]), F(c['hover'][1])
+        zk = sorted((f, z) for f, (x, y, z), _ in keys) if pts else []   # the path's own z keys: the bob rides the flight instead
+        def z_at(f):                                                     # of pinning to the LAST key's z (a hover during a descent
+            if not zk: return root.location.z                            # teleported the model to ground level mid-flight)
+            if f <= zk[0][0]: return zk[0][1]
+            if f >= zk[-1][0]: return zk[-1][1]
+            for (f0_, z0_), (f1_, z1_) in zip(zk, zk[1:]):
+                if f0_ <= f <= f1_: return z0_ + (z1_ - z0_) * (f - f0_) / max(1, f1_ - f0_)
+            return zk[-1][1]
         for f in range(a, b + 1, 6):
-            root.location.z = z0 + 0.2 * S * math.sin(2 * math.pi * (f - a) / 24); root.keyframe_insert('location', index=2, frame=f)
+            root.location.z = z_at(f) + 0.2 * S * math.sin(2 * math.pi * (f - a) / 24); root.keyframe_insert('location', index=2, frame=f)
     if mv is None or (kind == 'dragon' and mv == 'flyer'): return   # the dragon's flying is keyed above; no type saved: path only
     import beasts
     ends = [F(p['t']) for p in pts] + [F(x) for s in (c.get('sit') or [],) for x in s[1:2]] + [F(t) + fps for t in c.get('pounce', [])]

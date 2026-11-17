@@ -26,7 +26,8 @@ def box(t0, t1, alpha, layer=1, y0=0, h=1920):
 
 def txt(t0, t1, style, text, pos=None, layer=2, fx=''):
     p = (rf"\an{7 if style == 'Tag' else 5}\pos({pos[0]},{pos[1]})" if pos else '')
-    return f"Dialogue: {layer},{ts(t0)},{ts(t1)},{style},,0,0,0,,{{{p}{fx}}}{text}"
+    text = re.sub(r'[{}\\]', ' ', str(text)).replace('\n', ' ').replace('\r', ' ')   # { } start override blocks: story text is
+    return f"Dialogue: {layer},{ts(t0)},{ts(t1)},{style},,0,0,0,,{{{p}{fx}}}{text}"   # caption content, never ASS tags (1.11.1's cousin)
 
 
 def word_cards(text, t0, dur, style='Word'):
@@ -153,8 +154,9 @@ def hud_events(hud, total):
             ev.append(rf"Dialogue: 4,{ts(a)},{ts(b)},Card,,0,0,0,,{{\an9\pos(1030,{y0 + 64})\fnImpact\fs72\bord4\shad0\1c{bgr('#5BC25E')}\3c&H000000&}}${int(m):,}")
     for bn in hud.get('banners', []):
         a = float(bn['t']); b = a + float(bn.get('dur', 2.5)); col = bn.get('color', '#C8281E')
+        bt = re.sub(r'[{}\\]', ' ', str(bn['text'])).replace('\n', ' ').replace('\r', ' ').upper()   # story text, not ASS tags
         ev += [box(a, b, '70', 9, 860, 200),
-               rf"Dialogue: 10,{ts(a)},{ts(b)},Card,,0,0,0,,{{\an5\pos(540,960)\fnImpact\fs170\bord6\shad0\1c{bgr(col)}\3c&H000000&\fad(150,200)\fscx130\fscy130\t(0,250,\fscx100\fscy100)}}{str(bn['text']).upper()}"]
+               rf"Dialogue: 10,{ts(a)},{ts(b)},Card,,0,0,0,,{{\an5\pos(540,960)\fnImpact\fs170\bord6\shad0\1c{bgr(col)}\3c&H000000&\fad(150,200)\fscx130\fscy130\t(0,250,\fscx100\fscy100)}}{bt}"]
     sw = hud.get('switch')
     if sw:
         import math

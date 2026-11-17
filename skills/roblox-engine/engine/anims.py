@@ -203,8 +203,13 @@ def play(sc, ch, slug, f0, speed=1.0, loop_until=None, skip=(), blend=3, clear=N
     segment into it). `skip` = channels not to touch, e.g. ('legR', 'legL') while walking. clear = [(mesh, allowance m)] the
     arms must not cut (keys searched clear after keying). Legs keyed -> ground() plants the feet. Returns the last frame keyed."""
     import poses
+    if not (isinstance(speed, (int, float)) and not isinstance(speed, bool) and math.isfinite(speed) and speed > 0):
+        raise ValueError(f'anim_speed must be a positive number, not {speed!r}')   # 0 divided by it; negative would loop forever
     fps = sc.render.fps / sc.render.fps_base
-    data = convert(slug); dur = data[-1][0]
+    data = convert(slug)
+    if not data: raise ValueError(f'anim {slug!r} has no keys')
+    dur = data[-1][0]
+    if dur <= 0: raise ValueError(f'anim {slug!r} has zero duration')
     objs = poses._objs(ch); skip = set(skip)
     legs_amp = max([abs(x) for _, v, _ in data for c in ('legR', 'legL') if c in v for x in v[c] if abs(x) < 170] or [0])
     if legs_amp < 8: skip |= {'legR', 'legL'}   # a weight shift (wave/point <= 6 deg): rigid legs can only slide it

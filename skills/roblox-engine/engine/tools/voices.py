@@ -5,7 +5,7 @@ import argparse, hashlib, json, os, shutil, subprocess, sys, urllib.request
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SIGNUP = 'https://try.elevenlabs.io/m7d07a0chdsb'
-WORD_S = 1 / 0.3   # fallback words/second when ffprobe cannot read a clip (~0.3 s per spoken word)
+WORD_S = 0.3   # fallback SECONDS per spoken word when ffprobe cannot read a clip (was 1/0.3: a 6-word line got a 20 s mouth)
 API = 'https://api.elevenlabs.io'
 
 
@@ -23,19 +23,23 @@ def http(method, url, key, body=None):
 
 
 def lines(story):
-    """[(beat, key, text, voice_name)] for every say / narrate line."""
+    """[(beat, key, text, voice_name)] for every say / narrate line. A narrator with only `file_dir` (recorded files, consumed
+    by nobody yet) resolves to no voice: skipped here so the tool does not spend credits POSTing to .../text-to-speech/None."""
     out = []
     for sc in story.get('scenes', []):
         for b in sc.get('beats', []):
             if b.get('say') and story.get('voices', {}).get(b.get('who')): out.append((b, 'voice', b['say'], story['voices'][b['who']]))
-            if b.get('narrate'): out.append((b, 'narrate_voice', b['narrate'], (story.get('narrator') or {}).get('voice')))
+            nv = (story.get('narrator') or {}).get('voice')
+            if b.get('narrate') and nv: out.append((b, 'narrate_voice', b['narrate'], nv))
     return out
 
 
 def dur(path, words=0):
-    r = subprocess.run(['ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', path], capture_output=True, text=True, timeout=10)
-    try: return float(r.stdout.strip())
-    except ValueError: return round(words * WORD_S, 2)   # an unreadable file: fall back to the word-count estimate instead of crashing after paid TTS
+    try:
+        r = subprocess.run(['ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', path], capture_output=True, text=True, timeout=10)
+        return float(r.stdout.strip())
+    except (ValueError, OSError, subprocess.SubprocessError):
+        return round(words * WORD_S, 2)   # unreadable file or no ffprobe: fall back to the word-count estimate instead of crashing after paid TTS
 
 
 def polish(raw, out):   # trim lead/trail silence, loudnorm -16 LUFS

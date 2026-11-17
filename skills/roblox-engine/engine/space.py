@@ -102,6 +102,10 @@ class World:
             skip |= {o.name for o in ch.root.children_recursive} | {ch.root.name}
         for p in (props.values() if isinstance(props, dict) else props):
             skip |= {o.name for o in p.children_recursive} | {p.name}
+            if 'creature_root' in p.keys():   # a creature subject is one mesh of a moving rig: its OTHER parts must not become
+                r = self.sc.objects.get(p['creature_root'])   # frozen frame-0 obstacles (a walking wolf's stale pose gated nothing
+                if r is not None:                             # and false-hit everything after it left)
+                    skip |= {r.name} | {o.name for o in r.children_recursive}
         nonsolid, owner = set(), {}
         try:
             import assets
@@ -137,7 +141,7 @@ class World:
         mesh, the route planner only knew the registered pieces (an imported coffee table's top was 'visual': routes walked
         between its 4 legs and every walk was rejected, R228). Rays straight down on a `cell` grid over each free-standing mesh
         (walls and other meshes touching the room bounds stay the bounds' job). Cached per world."""
-        key = (len(listed), bounds and tuple(bounds))
+        key = (tuple(sorted(map(tuple, listed))), bounds and tuple(bounds))   # content, not just length: two same-length obstacle lists differ
         if getattr(self, '_unlisted', (None,))[0] == key: return self._unlisted[1]
         out = []
         for name, bvh, lo, hi, _ in self.obs:

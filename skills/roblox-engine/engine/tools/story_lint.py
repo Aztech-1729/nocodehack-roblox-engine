@@ -14,9 +14,9 @@ A = E / 'assets'
 TOP = {'title', 'fps', 'mood', 'cast', 'scenes', 'seed', 'camera', 'look', 'set', 'auto_acting', 'strict_crowd', 'frame',
        'format', 'header', 'captions', 'narrator', 'voices', 'cards', 'split', 'hud', 'blood', 'bruises'}   # frame: B1 [w, h]
 SCENE = {'set', 'seconds', 'cast', 'props', 'creatures', 'beats', 'shots', 'look', 'breathe', 'fps', 'camera', 'establish', 'inserts', 'reactions',
-         'pitch', 'ecu', 'auto_acting', 'auto_faces', 'strict_crowd', 'music', 'title', 'crowd', 'blood', 'bruises'}
+         'pitch', 'ecu', 'auto_acting', 'auto_faces', 'strict_crowd', 'music', 'title', 'crowd', 'blood', 'bruises', 'fights', 'falls'}
 SET = {'preset', 'size', 'height', 'wall', 'trim', 'floor', 'floor_color', 'door', 'wall_low', 'wainscot', 'windows', 'doors', 'decor',
-       'ceiling_lamps', 'seed', 'time', 'mood', 'outdoor', 'park', 'dress', 'rbx', 'at', 'rot', 'scale', 'ground', 'board', 'notes', 'desks'}
+       'ceiling_lamps', 'seed', 'time', 'mood', 'outdoor', 'park', 'dress', 'rbx', 'at', 'rot', 'scale', 'ground', 'board', 'notes', 'desks', 'weather'}
 LOOKS = {'name', 'shirt', 'pants', 'skin', 'hair', 'hair_style', 'face', 'face_family', 'face_marks', 'outfit', 'accessories'}
 SCAST = LOOKS | {'at', 'yaw'}
 PROP = {'name', 'kind', 'on', 'at', 'z', 'rot', 'held_by', 'hand', 'until', 'shake'}
@@ -24,7 +24,7 @@ CREATURE = {'name', 'kind', 'at', 'z', 'yaw', 'scale', 'color', 'belly', 'wing',
 BEAT = {'t', 'who', 'walk', 'speed', 'run', 'stride', 'hand', 'sit', 'stand', 'fall', 'get_up', 'give', 'throw', 'turn', 'pose', 'jump',
         'wiggle', 'wiggle_s', 'anim', 'loop', 'anim_speed', 'anim_skip', 'face', 'talk', 'gesture', 'look', 'track', 'grab', 'move',
         'attack', 'block', 'dodge', 'knockback', 'down', 'fly', 'land', 'power_up', 'aura', 'aura_color', 'beam', 'exclaim', 'transform',
-        'say', 'voice', 'sfx', 'type', 'narrate', 'narrate_voice', 'freeze', 'shoot', 'wear', 'remove'}
+        'say', 'voice', 'sfx', 'type', 'narrate', 'narrate_voice', 'freeze', 'shoot', 'wear', 'remove', 'target'}
 SHOT = {'t', 'kind', 'on', 'lens', 'track', 'hold', 'angle', 'side', 'push', 'shake', 'shake_amp', 'keep_two', 'profile', 'front', 'frame',
         'move', 'ots', 'ecu', 'punch'}
 SUB = {'shoot': {'target', 'shots', 'every', 'side', 'hit'}, 'attack': {'move', 'target', 'blocked', 'catch', 'no_look', 'flurry', 's', 'hold', 'relax', 'aura', 'color'},
@@ -498,6 +498,8 @@ def lint_scene(R, L, S, sc, si, looks, sdir, fps):
     if 'time' in st and st['time'] not in TIMES: R.err(W + ' set', 'time', f"'{st['time']}' -> day, evening or night")
     if 'mood' in st and st['mood'] not in LIGHT_MOODS:
         R.err(W + ' set', 'mood', f"light mood '{st['mood']}' unknown -> one of {sorted(LIGHT_MOODS)} (music loops go in the story/scene key, not set.mood)")
+    if 'weather' in st and str(st['weather']).lower() not in ('none', 'snow', 'rain'):
+        R.warn(W + ' set', 'weather', f"'{st['weather']}' -> none, snow or rain (anything else reads as clear sky)")
     if 'music' in sc and sc['music'] not in L.music: R.err(W, 'music', f"music loop '{sc['music']}' does not exist -> one of {sorted(L.music)}{near(sc['music'], L.music)}")
     pinfo = L.presets.get(preset, {'size': [28, 24], 'outdoor': False} if preset == 'room' else {'size': None, 'outdoor': False})
     size = st.get('size', pinfo['size']) if preset not in ('rbx', 'classroom') else None
@@ -518,6 +520,8 @@ def lint_scene(R, L, S, sc, si, looks, sdir, fps):
 
     # cast
     cast = {}
+    if not isinstance(sc.get('cast'), list) or not sc['cast']:
+        R.err(W, 'cast', "missing -> add the scene's characters (story.py crashes without it)")
     for i, c in enumerate(sc.get('cast', []) or []):
         w = f'{W} cast[{i}]'
         if not isinstance(c, dict) or 'name' not in c: R.err(w, 'name', 'every scene cast entry needs a "name"'); continue
@@ -553,11 +557,17 @@ def lint_scene(R, L, S, sc, si, looks, sdir, fps):
         elif k not in PROP_BUILTIN and not L.kenney_ok(k) and not (k.startswith('lib:') and k[4:].lower() in L.acc):
             R.err(w, 'kind', f"prop kind '{k}' is not built-in ({', '.join(sorted(PROP_BUILTIN))}) and not a Kenney model (assets/kenney/catalog.md)")
         if p.get('held_by') and p['held_by'] not in cast: R.err(w, 'held_by', f"'{p['held_by']}' is not in this scene's cast{near(p['held_by'], cast)}")
+        if 'until' in p and not num(p['until']): R.err(w, 'until', f"{p['until']!r} must be a number of seconds (a string crashed the release bake)")
+        if 'shake' in p and not (isinstance(p['shake'], list) and all(num(x) for x in p['shake'])):
+            R.err(w, 'shake', f'{p["shake"]!r} must be a list of seconds -> "shake": [2.0, 5.5]')
         if p.get('on') and not piece_ok(p['on']): R.warn(w, 'on', f"'{p['on']}' is not a known set piece of '{preset}' -> an exact name from short.schema.md 'Preset pieces' or a dress name")
     for i, c in enumerate(sc.get('creatures', []) or []):   # creatures.py: big creatures / custom models, referenced like props
         w = f'{W} creature[{i}]'
         if not isinstance(c, dict) or 'name' not in c: R.err(w, 'name', 'every creature needs a "name"'); continue
         unknown(R, w, c, CREATURE, 'creature'); props[c['name']] = {**c, 'kind': 'creature'}
+        if c['name'] in looks: R.err(w, 'name', f"'{c['name']}' is also a cast name -> rename one (look/turn/beat dispatch cannot tell them apart)")
+        if sum(1 for c2 in sc.get('creatures', []) or [] if isinstance(c2, dict) and c2.get('name') == c['name']) > 1:
+            R.err(w, 'name', f"'{c['name']}' is listed twice -> one creature per name (the second silently shadows the first)")
         k = str(c.get('kind', 'dragon'))
         if k.startswith('rbx:'):
             if not any(k[4:].lower() in r for r in L.rbx):
@@ -616,15 +626,25 @@ def lint_scene(R, L, S, sc, si, looks, sdir, fps):
             R.warn(w, 'anim', f"anim '{b['anim']}' is not on this PC (Roblox refused it): the build plays a similar clip or none")
         elif 'anim' in b and b['anim'] not in L.anims: R.err(w, 'anim', f"unknown anim '{b['anim']}' -> a slug from assets/anims/LIBRARY.md{near(b['anim'], L.anims)}")
         if 'wiggle' in b and b['wiggle'] not in CHANNELS: R.err(w, 'wiggle', f"'{b['wiggle']}' -> R, L, legR, legL, head, body")
+        if 'wiggle' in b and b['wiggle'] in CHANNELS and 'wiggle_s' in b and not num(b['wiggle_s']):
+            R.err(w, 'wiggle_s', f'{b["wiggle_s"]!r} must be a number of seconds')
         if 'sfx' in b and str(b['sfx']).split('/')[0] not in L.sfx: R.err(w, 'sfx', f"sound '{b['sfx']}' has no folder in assets/sfx (sound_mix crashes){near(b['sfx'], L.sfx)}")
         if 'type' in b and not num(b['type']): R.err(w, 'type', 'seconds of keyboard typing, a number')
+        if 'anim' in b and 'anim_speed' in b and not (num(b['anim_speed']) and b['anim_speed'] > 0):
+            R.err(w, 'anim_speed', f'{b["anim_speed"]!r} must be a positive number (0 divided by it; a negative one loops forever)')
         for k in ('look', 'turn'):
             if isinstance(b.get(k), str): target_ok(w, k, b[k])
+        if 'sit' in b and b.get('sit') is not None and not isinstance(b.get('sit'), str):
+            R.err(w, 'sit', f'{b["sit"]!r} must be a seat name (a word such as "chair") -> sit: "sofa"')   # sit: true crashed the build
         if isinstance(b.get('sit'), str): target_ok(w, 'sit', b['sit'])
         for k in ('grab', 'give', 'throw'):
             v = b.get(k)
             if isinstance(v, dict):
                 if v.get('prop') not in props: R.err(w, k, f"prop '{v.get('prop')}' is not in this scene's props (props are declared per scene){near(v.get('prop'), props)}")
+                elif props[v.get('prop')].get('kind') == 'creature':
+                    R.warn(w, k, f"'{v.get('prop')}' is a CREATURE: grabbing/giving it is not supported -> throw at a character or spot, or look at it")
+                if k == 'grab' and 'until' in v and not num(v['until']):
+                    R.err(w, 'grab', f"'until' {v['until']!r} must be a number of seconds (a string crashed the release bake)")
                 if k == 'give' and v.get('to') not in cast: R.err(w, 'give', f"'to' '{v.get('to')}' is not in this scene's cast{near(v.get('to'), cast)}")
             elif v is not None: R.err(w, k, f'must be an object, e.g. {{"prop": "cup"{", " + chr(34) + "to" + chr(34) + ": " + chr(34) + "Lia" + chr(34) if k != "grab" else ""}}}')
         # seated
@@ -650,12 +670,18 @@ def lint_scene(R, L, S, sc, si, looks, sdir, fps):
             if goal is not None and size and is_xy(size) and not outdoor and (abs(goal[0]) > size[0] / 2 or abs(goal[1]) > size[1] / 2):
                 R.err(w, 'walk', f'goal {[round(goal[0], 1), round(goal[1], 1)]} is outside the {size[0]}x{size[1]} room')
             sp_ = b.get('speed', 13 if b.get('run') else WALK_SPEED) or WALK_SPEED
+            if 'speed' in b and not (num(b['speed']) and b['speed'] > 0):
+                R.err(w, 'speed', f"{b['speed']!r} must be a positive number of studs/s -> e.g. \"speed\": 9.5 (speed: 0 crashed the walk bake)")
+                sp_ = 13 if b.get('run') else WALK_SPEED
+            elif not num(sp_) or sp_ <= 0:
+                sp_ = 13 if b.get('run') else WALK_SPEED
             T.move(who, t, t + length / sp_, goal)
         if b.get('sit'): Track.open_span(T.seated[who], t)
         if 'fly' in b and not isinstance(b.get('fly'), dict): R.err(w, 'fly', 'must be an object with "to", optional "height" and "s"')
         if isinstance(b.get('fly'), dict):
             fl = b['fly']; to = fl.get('to'); p0 = T.at(who, t); q = None
             sv, hv = fl.get('s', 1.0), fl.get('height', 4)
+            sv = 1.0 if sv is True else (0.0 if sv is False else sv)   # fight._dur parity (true = 1 s, false = rejected with s <= 0)
             if not finite_num(sv) or sv <= 0: R.err(w, 'fly', f'"s" must be a finite positive number, not {sv!r}'); s_ = 1.0
             else:
                 s_ = float(sv)
@@ -684,9 +710,10 @@ def lint_scene(R, L, S, sc, si, looks, sdir, fps):
         # fight
         a = b.get('attack')
         if a is not None:
+            if isinstance(a, str): a = {'move': a}   # the string shorthand the runtime accepts (fight.py: {'move': b['attack']})
             if not isinstance(a, dict): R.err(w, 'attack', 'must be {"move": "punch_R", "target": "<name>"}')
             else:
-                tg = a.get('target'); fl_ = a.get('flurry')
+                tg = a.get('target') or b.get('target'); fl_ = a.get('flurry')
                 if tg not in cast or tg == who: R.err(w, 'attack', f"target '{tg}' is not another character in this scene{near(tg, cast)}")
                 if fl_ is not None:
                     if not (isinstance(fl_, list) and len(fl_) >= 2 and all(m in L.attacks for m in fl_)): R.err(w, 'attack', f'flurry must be a list of 2+ strikes from {sorted(L.attacks)}')
@@ -711,10 +738,12 @@ def lint_scene(R, L, S, sc, si, looks, sdir, fps):
             else:
                 fr = kb.get('from')
                 if fr not in cast or fr == who: R.err(w, 'knockback', f"'from' '{fr}' is not another character in this scene{near(fr, cast)}")
+                for kk_ in ('distance', 'height'):
+                    if kk_ in kb and not finite_num(kb[kk_]): R.err(w, 'knockback', f"'{kk_}' must be a finite number, not {kb[kk_]!r} (a string crashed the bake)")
                 p0 = T.at(who, t); land = None
                 if is_xy(kb.get('to')): land = (float(kb['to'][0]), float(kb['to'][1]))
-                elif fr in cast and p0 is not None:
-                    pf = T.at(fr, t); dx, dy = p0[0] - pf[0], p0[1] - pf[1]; dd = math.hypot(dx, dy) or 1.0; k_ = float(kb.get('distance', 8))
+                elif fr in cast and p0 is not None and (not ('distance' in kb) or finite_num(kb['distance'])):
+                    pf = T.at(fr, t); dx, dy = p0[0] - pf[0], p0[1] - pf[1]; dd = math.hypot(dx, dy) or 1.0; k_ = float(kb.get('distance', 8) or 8) if finite_num(kb.get('distance')) else 8.0
                     land = (p0[0] + dx / dd * k_, p0[1] + dy / dd * k_)
                 if land is not None:
                     if size and is_xy(size) and (abs(land[0]) > size[0] / 2 - 1 or abs(land[1]) > size[1] / 2 - 1):
@@ -736,6 +765,8 @@ def lint_scene(R, L, S, sc, si, looks, sdir, fps):
                 elif target not in cast: R.err(w, 'beam', f"to '{target}' is not in this scene's cast{near(target, cast)}")
                 elif target == who: R.err(w, 'beam', 'to must name another character, not the caster')
                 duration, charge = bm.get('s', 1.0), bm.get('charge', 0.6)
+                duration = 1.0 if duration is True else (0.0 if duration is False else duration)   # fight._dur parity: booleans are
+                charge = 1.0 if charge is True else (0.0 if charge is False else charge)           # numbers to the engine (true = 1 s)
                 if not finite_num(duration) or duration <= 0:
                     R.err(w, 'beam', f's must be a finite positive number, not {duration!r}')
                 else: check_effect_frames(R, w, 'beam', '"beam" s', duration, fps, L)
@@ -757,6 +788,7 @@ def lint_scene(R, L, S, sc, si, looks, sdir, fps):
                     if 'to' in df and not finite_coords(df['to'], 3): R.err(w, 'beam', f"deflect.to must be three finite [x, y, z] studs, not {df['to']!r}")
                     if df.get('hand', 'R') not in ('R', 'L'): R.err(w, 'beam', f"deflect.hand must be R or L, not {df.get('hand')!r}")
                     after = df.get('after', 0.5)
+                    after = 1.0 if after is True else (0.0 if after is False else after)   # fight._dur parity
                     if not finite_num(after) or after <= 0:
                         R.err(w, 'beam', f'deflect.after must be a finite positive number, not {after!r}')
                     elif finite_num(duration) and duration > 0:
@@ -768,18 +800,45 @@ def lint_scene(R, L, S, sc, si, looks, sdir, fps):
                         else: check_effect_frames(R, w, 'beam', '"beam" deflect.after', after, fps, L)
                 if finite_num(charge) and charge >= 0 and t - float(charge) < 0:
                     R.warn(w, 'beam', 'the charge starts before the scene -> t >= charge')
-        # effect durations must fit the fight frame budget (fight._frames; the budget is parsed from fight.py above)
+        # effect durations must fit the fight frame budget (fight._frames + fight._dur: booleans are numbers to the engine,
+        # true = 1 s, false = 0); power_up: false is the one that the runtime REJECTS (the owner's PR #2 normalizer keeps
+        # `true` at 1 s and lets non-numbers fall to the 1.5 s default, but false reaches sec() as False and raises).
+        def dur_(v): return 1.0 if v is True else (0.0 if v is False else v)
         pv_ = b.get('power_up')
-        if isinstance(pv_, (int, float)) and not isinstance(pv_, bool): check_effect_frames(R, w, 'power_up', '"power_up"', pv_, fps, L)
+        if pv_ is False: R.err(w, 'power_up', f'{pv_!r} is rejected by the engine (true = 1 s, a number = seconds)')
+        elif isinstance(pv_, (int, float)) and not isinstance(pv_, bool): check_effect_frames(R, w, 'power_up', '"power_up"', pv_, fps, L)
         au_ = b.get('aura')
         if isinstance(au_, (int, float)) and not isinstance(au_, bool): check_effect_frames(R, w, 'aura', '"aura"', au_, fps, L)
-        elif isinstance(au_, dict): check_effect_frames(R, w, 'aura', '"aura"', au_.get('s', 2), fps, L)
+        elif isinstance(au_, dict): check_effect_frames(R, w, 'aura', '"aura"', dur_(au_.get('s', 2)), fps, L)
+        elif au_ is True: check_effect_frames(R, w, 'aura', '"aura"', 1.0, fps, L)
         tr_ = b.get('transform')
         if isinstance(tr_, dict):
-            check_effect_frames(R, w, 'transform', '"transform" s', tr_.get('s', 2.0), fps, L)
-            check_effect_frames(R, w, 'transform', '"transform" hold', tr_.get('hold', 2.0), fps, L)
+            check_effect_frames(R, w, 'transform', '"transform" s', dur_(tr_.get('s', 2.0)), fps, L)
+            check_effect_frames(R, w, 'transform', '"transform" hold', dur_(tr_.get('hold', 2.0)), fps, L)
         at_ = b.get('attack')
-        if isinstance(at_, dict) and 'flurry' in at_: check_effect_frames(R, w, 'attack', '"flurry" s', at_.get('s'), fps, L)
+        if isinstance(at_, dict) and 'flurry' in at_: check_effect_frames(R, w, 'attack', '"flurry" s', dur_(at_.get('s')), fps, L)
+        if isinstance(at_, dict) and at_.get('hold') is not None: check_effect_frames(R, w, 'attack', '"attack" hold', dur_(at_.get('hold')), fps, L)
+        # shoot rules (build.py validates before touching the scene; these mirror it — the values used to hard-crash the build)
+        sh_ = b.get('shoot')
+        if 'shoot' in b:
+            sp2 = sh_ if isinstance(sh_, dict) else {'target': sh_}
+            tg2 = sp2.get('target')
+            if isinstance(tg2, str):
+                if tg2 not in cast and tg2 not in props: R.err(w, 'shoot', f"target '{tg2}' is not in this scene's cast or props{near(tg2, list(cast) + list(props))}")
+            elif isinstance(tg2, (list, tuple)) and len(tg2) == 2 and all(num(x) for x in tg2): pass
+            else: R.err(w, 'shoot', f'target must be a name or [x, y] studs, not {tg2!r}')
+            if sp2.get('side', 'R') not in ('R', 'L'): R.err(w, 'shoot', f"side must be R or L, not {sp2.get('side', 'R')!r}")
+            nsh = sp2.get('shots', 1)
+            if not num(nsh) or nsh < 1: R.err(w, 'shoot', f'shots must be a number >= 1, not {nsh!r}')
+            elif nsh > 24: R.err(w, 'shoot', f'shots {nsh} is capped at 24 by the engine -> split the burst or raise "every"')
+            ev2 = sp2.get('every', .25)
+            if not num(ev2) or ev2 < 0: R.err(w, 'shoot', f'every must be a number of seconds >= 0, not {ev2!r}')
+        # down rules (down.yaw as a string crashed the bake; pose/side were silent no-ops)
+        dn_ = b.get('down')
+        if isinstance(dn_, dict):
+            if dn_.get('pose', 'curl') != 'curl': R.err(w, 'down', f"pose {dn_.get('pose')!r} is not supported (curl)")
+            if dn_.get('side', 'R') not in ('R', 'L'): R.err(w, 'down', f"side must be R or L, not {dn_.get('side', 'R')!r}")
+            if 'yaw' in dn_ and not finite_num(dn_['yaw']): R.err(w, 'down', f"yaw must be a finite number, not {dn_['yaw']!r} (a string crashed the bake)")
         # speech
         say, talk = b.get('say'), b.get('talk')
         if talk is not None and not num(talk): R.err(w, 'talk', 'seconds, a number')

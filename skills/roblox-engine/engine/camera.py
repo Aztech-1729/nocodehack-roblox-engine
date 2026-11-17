@@ -367,7 +367,7 @@ def pov_shot(sc, name, f0, f1, ch, lens=28, others=()):
     for f in sorted(set(list(range(f0, f1 + 1, 3)) + [f1])):
         sc.frame_set(f)
         eye = ch.head_mesh.matrix_world.translation.copy(); fwd = ch.head.matrix_world.to_3x3() @ Vector((0, -1, 0)); fwd.z = 0
-        fwd = fwd.normalized() if fwd.length > 1e-6 else Vector((0, -1, 0)); t = f / 24.0
+        fwd = fwd.normalized() if fwd.length > 1e-6 else Vector((0, -1, 0)); t = f / (sc.render.fps / sc.render.fps_base)
         tgt = min((o.head_mesh.matrix_world.translation.copy() for o in others), key=lambda q: (q - eye).length, default=None)
         if tgt is not None and (tgt - eye).length > 0.3: fwd = (tgt - eye).normalized()   # you look at whoever is with you
         P = eye + fwd * 0.4 + Vector((math.sin(t * 4.2 + ph[0]), math.sin(t * 3.1 + ph[1]), math.sin(t * 3.7 + ph[2]))) * 0.012
@@ -778,7 +778,7 @@ def _move_camera(sc, cam, P, A, f0, f1, move, kind, people, name, focus=None):
     for f in list(range(f0, f1 + 1, 3)) + ([f1] if (f1 - f0) % 3 else []):
         u = (f - f0) / n; u = u * u * (3 - 2 * u)
         q = P if move == 'still' else path(u)
-        t = f / 24.0; dr = Vector((math.sin(t * 4.2 + ph[0]), math.sin(t * 3.1 + ph[1]), math.sin(t * 3.7 + ph[2]))) * 0.012
+        t = f / (sc.render.fps / sc.render.fps_base); dr = Vector((math.sin(t * 4.2 + ph[0]), math.sin(t * 3.1 + ph[1]), math.sin(t * 3.7 + ph[2]))) * 0.012
         cam.location = q + dr; cam.keyframe_insert('location', frame=f)
         rot = (A - q).to_track_quat('-Z', 'Y').to_euler()
         rot.x += math.radians(0.25) * math.sin(t * 2.9 + ph[3]); rot.z += math.radians(0.25) * math.sin(t * 2.3 + ph[4])
@@ -1026,9 +1026,10 @@ def _shot(sc, name, f0, f1, kind='medium', subjects=(), side=0.0, lens=50, push=
         sc.frame_set((f0 + f1) // 2); pp_ = subjects[0].matrix_world.translation
         holder = min(cast, key=lambda c_: min((a_.matrix_world.translation - pp_).length for a_ in c_.arms))
         if min((a_.matrix_world.translation - pp_).length for a_ in holder.arms) > 1.2: holder = None
-    if kind == 'insert' and holder is None and not hasattr(subjects[0], 'head_mesh'):   # a RESTING prop fills at most ~45 % of the frame
-        ms_ = [o for s_ in subjects for o in ([s_] if s_.type == 'MESH' else [x for x in s_.children_recursive if x.type == 'MESH'])]   # (a 0.5 m box filled all of a 0.9 m frame after the push-in)
-        if ms_:
+    if kind == 'insert' and holder is None and not hasattr(subjects[0], 'head_mesh') \
+            and not any(s_.get('creature_root') for s_ in subjects):   # a RESTING prop fills at most ~45 % of the frame (a CREATURE
+        ms_ = [o for s_ in subjects for o in ([s_] if s_.type == 'MESH' else [x for x in s_.children_recursive if x.type == 'MESH'])]   # is sized by its own rule below: the
+        if ms_:   # resting-prop multiplier ran first and kept the huge one, so the insert became a far wide)
             pp_ = [o.matrix_world @ Vector(c_) for o in ms_ for c_ in o.bound_box]
             H0 = max(H0, 2.2 * max(max(q[i_] for q in pp_) - min(q[i_] for q in pp_) for i_ in range(3)))
     cr_ = next((bpy.data.objects.get(s_.get('creature_root')) for s_ in subjects if not hasattr(s_, 'head_mesh') and s_.get('creature_root')), None)
@@ -1128,7 +1129,9 @@ def _shot(sc, name, f0, f1, kind='medium', subjects=(), side=0.0, lens=50, push=
                 pos = aim_ + (pos - aim_) * 0.88; L *= 0.88
             else:
                 relax = relax or (pos, aim_.copy(), max(L, 14.0), H / H0); continue   # still in furniture after 12 dollies: keep it as a last resort
-            if L < 14: continue
+            if L < 14:
+                relax = relax or (pos, aim_.copy(), max(L, 14.0), H / H0)   # the 12 dolly-outs shrank the lens below the floor: keep
+                continue   # the furthest as a last resort too, or a fully boxed-in aim left `tried` empty and max() killed the build
             cands.append((pos, aim_.copy(), L, H / H0))
       if not cands and relax: cands.append(relax)   # never return empty: max() on tried would kill the build
       return cands
@@ -1255,9 +1258,11 @@ def _shot(sc, name, f0, f1, kind='medium', subjects=(), side=0.0, lens=50, push=
             + (1.0 - g(' front~', 1.0) if g(' front~', 1.0) < 0.5 else 0.0) + (0.5 + v_.get('body~', 0.0) if 'limb fills the frame' in unread(name, v_) else 0.0) \
             + (0.4 if 'back of a head' in unread(name, v_) else 0.0) + (0.6 if 'subject hidden' in unread(name, v_) else 0.0) \
             + (0.5 if 'prop half hidden' in unread(name, v_) else 0.0) + (0.8 if 'face not shown' in unread(name, v_) and not top_fit else 0.0)             + 1.5 * (1.0 - g(' safe~', 1.0)) + (0.3 + v_.get('other~', 0.0) if v_.get('other~', 0.0) > 0.25 else 0.0)
-    def worth(v):   # fallback order when nothing passes: focus face first, then the worst gated target
-        g = [x for k, x in v.items() if not k.endswith('~')]
-        return (v.get(subj_chars[0].name + ' face', 1.0) if subj_chars else 1.0, min(g) if g else 1.0)
+    def worth(v):   # fallback order when nothing passes: focus face first, then the worst gated target. FACE_OPT shots report the
+        g = [x for k, x in v.items() if not k.endswith('~')]   # face as '<name> face~' (report-only): read that one when the gated
+        fk = (subj_chars[0].name + ' face') if subj_chars else None   # key is absent, or the ranker always saw a default 1.0 there
+        fv = v.get(fk) if fk and fk in v else (v.get(subj_chars[0].name + ' face~') if subj_chars else None)
+        return (fv if fv is not None else 1.0, min(g) if g else 1.0)
     # The chooser scores static candidates; the gate judges the moved camera. Validate the top candidates in rank order on
     # their FINAL trajectory (move, tracking) and take the first that passes; jump-cut candidates only if nothing else passes.
     # If none passes: a second ring (full 360, longer lenses for inserts: a prop at knee height is seen over a leg from further

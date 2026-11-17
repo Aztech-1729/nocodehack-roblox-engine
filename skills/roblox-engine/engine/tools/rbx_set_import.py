@@ -529,7 +529,9 @@ if __name__ == '__main__':
         if a[2] not in ok: raise SystemExit(f"moves '{a[2]}' -> one of {', '.join(ok)}")
         hit = sorted(d for d in OUT.iterdir() if (d / 'scene.json').exists() and (d.name.split('_', 1)[0] == a[1] or a[1].lower() in d.name.lower()))
         if not hit: raise SystemExit(f'no imported model {a[1]!r} in {OUT}')
-        f = hit[0] / 'creature.json'; f.write_text(json.dumps({'moves': a[2]}), encoding='utf-8'); print('MOVES', f.parent.name, a[2])
+        f = hit[0] / 'creature.json'
+        tmp = f.with_suffix('.json.tmp'); tmp.write_text(json.dumps({'moves': a[2]}), encoding='utf-8'); tmp.replace(f)   # atomic: a killed
+        print('MOVES', f.parent.name, a[2])                                                                               # import left a truncated file that crashed every later build
     elif a[0] == 'build':
         import bpy
         selftest(); bpy.ops.wm.read_factory_settings(use_empty=True)

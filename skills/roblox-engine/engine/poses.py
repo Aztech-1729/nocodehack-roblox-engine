@@ -202,14 +202,6 @@ def jump(sc, ch, t, height=0.9, crouch=4, air=8, tuck=1.0):
     k(t + air // 2, height, 22); k(t + air - 2, 0.25 * height, 8); k(t + air, 0, 0); k(t + air + 4, 0, 0)
     return t + air + 4
 
-def breathe(sc, ch, f0, f1, period=72, amp_deg=1.2):
-    """Idle life on the upper body (adds a tiny forward/back sway on X) where nothing else keys it."""
-    obj = ch.upper
-    for i, f in enumerate(range(f0, f1, period // 2)):
-        sc.frame_set(f); v = Vector(obj.rotation_euler); v[0] += D(amp_deg) * (1 if i % 2 else -1)
-        obj.rotation_euler = v; obj.keyframe_insert('rotation_euler', frame=f)
-
-
 def breathe(sc, ch, n, period_s=3.2, amp=0.015, phase=0.0):
     """Idle life on every frame 0..n-1 using ONLY location/scale channels (poses, walks, gaze and aims key rotations, so nothing
     fights): chest rises by amp (fraction of the 1 m torso), head + shoulders ride on it. Call right after the cast is built,

@@ -72,7 +72,7 @@ def attack_case(kind, blocked):
         target.root.keyframe_insert('location', frame=200)
         target.root.keyframe_insert('rotation_euler', frame=0)
         target.root.keyframe_insert('rotation_euler', frame=200)
-    else:
+    elif kind != 'standing':
         raise AssertionError(kind)
     for arm in target.arms_piv:
         arm.rotation_euler.y = 0.15
@@ -82,11 +82,13 @@ def attack_case(kind, blocked):
     frame = 40
     scene.frame_set(frame)
     bpy.context.view_layer.update()
-    assert not lo._standing_pose(target), f'{kind} defender unexpectedly standing'
+    if kind != 'standing':
+        assert not lo._standing_pose(target), f'{kind} defender unexpectedly standing'
     before = curves(target)
     log = []
     result = fight.attack(scene, attacker, target, 'punch_R', frame, log, blocked=blocked)
-    assert before == curves(target), f'{kind} blocked={blocked}: defender curves changed'
+    if kind in ('seated', 'lying'):   # seated/lying keep EVERY authored key; a standing blocked target keys its catch hand
+        assert before == curves(target), f'{kind} blocked={blocked}: defender curves changed'   # and an unblocked one reacts
     assert result['ok'] and log, f'{kind} blocked={blocked}: no accepted real contact'
     assert result['contact_frame'] == frame and log[-1]['error_m'] < 0.005
     scene.frame_set(frame)
@@ -95,7 +97,8 @@ def attack_case(kind, blocked):
     tip = hit['pivot'].matrix_world @ hit['tip_local']
     surface = hit['target'].matrix_world @ hit['target_local']
     assert (tip - surface).length < 0.005, f'{kind} strike missed the evaluated target mesh'
-    print(f'PASS real contact {kind}, blocked={blocked}, error={log[-1]["error_m"]:.4f} m; defender curves unchanged')
+    print(f'PASS real contact {kind}, blocked={blocked}, error={log[-1]["error_m"]:.4f} m'
+          + ('; defender curves unchanged' if kind in ('seated', 'lying') else ' (standing target: catch/react keyed by design)'))
 
 
 def walk_knockback_case():
@@ -371,10 +374,10 @@ def beam_case(payload, expected=True):
         print(f'PASS rejected beam {payload!r} before keying')
 
 
-def lint_beat_case(beat, key, expected=True, scene_fps=None):
+def lint_beat_case(beat, key, expected=True, scene_fps=None, cast_at=((-4, 0), (4, 0))):
     import story_lint
     scene = {'seconds': 5, 'set': {'preset': 'classroom'},
-             'cast': [{'name': 'Caster', 'at': [-4, 0]}, {'name': 'Target', 'at': [4, 0]}],
+             'cast': [{'name': 'Caster', 'at': list(cast_at[0])}, {'name': 'Target', 'at': list(cast_at[1])}],
              'beats': [beat]}
     if scene_fps: scene['fps'] = scene_fps
     story = {
@@ -416,13 +419,70 @@ def lint_scene_fps_case():
 
 
 # Seated and lying defenders keep their authored curves even when the strike is blocked.
-for _kind in ('seated', 'lying'):
+def no_walk_knockback_case():
+    """knockback WITHOUT a walk: the strike's stagger keys must survive — the hold/clear path runs only when a walk owns the
+    frame (the owner's PR #2 guard; without it every shipped knockback lost its recoil)."""
+    clean()
+    ch = make_char('Victim')
+    source = make_char('Source', at=(-4, 0))
+    cast = {'Victim': ch, 'Source': source}
+    rig.CAST.update(cast)
+    scene.frame_set(40)
+    bpy.context.view_layer.update()
+    ch.arm['R'].rotation_euler.y = 0.5   # what a previous strike leaves behind: a stagger key past the hit pose's window
+    ch.arm['R'].keyframe_insert('rotation_euler', frame=48)
+    end = fight.knockback(scene, ch, (1, 0), 40, 4, 1)
+    stagger = [k.co.y for fc in space.fcurves_of(ch.arm['R']) if fc.data_path == 'rotation_euler' and fc.array_index == 1
+               for k in fc.keyframe_points if abs(k.co.x - 48) < 0.01]
+    assert stagger and abs(stagger[0] - 0.5) < 1e-5, 'a no-walk knockback deleted the strike stagger key at f48'
+    print(f'PASS no-walk knockback keeps the stagger key at f48 (fall ends f{end})')
+
+
+def bool_durations_case():
+    """Booleans are numbers to the engine (fight._dur): true = 1 s everywhere, as 1.13.0 read them."""
+    flyer, _, cast = fight_context()
+    before = curves(flyer)
+    log, jobs = run_beat({'t': 1, 'who': 'Flyer', 'power_up': True}, flyer, cast)
+    assert not log.get('errors') and jobs, f'power_up true rejected: {log.get("errors")}'
+    log, jobs = run_beat({'t': 1, 'who': 'Flyer', 'aura': True}, flyer, cast)
+    assert not log.get('errors') and jobs, f'aura true rejected: {log.get("errors")}'
+    log, jobs = run_beat({'t': 1, 'who': 'Flyer', 'fly': {'to': [5, 2], 's': True}}, flyer, cast)
+    assert not log.get('errors'), f'fly s true rejected: {log.get("errors")}'
+    log, jobs = run_beat({'t': 1, 'who': 'Flyer', 'transform': {'hair': 'lib:super_saiyan1', 'hold': True}}, flyer, cast)
+    assert not log.get('errors'), f'transform hold true rejected: {log.get("errors")}'
+    before_kb = curves(flyer)
+    log, jobs = run_beat({'t': 1, 'who': 'Flyer', 'knockback': {'from': 'Target', 'distance': '9'}}, flyer, cast)
+    assert log.get('errors') and before_kb == curves(flyer) and not jobs, f'a string knockback distance crashed or authored: {log.get("errors")}'
+    log, jobs = run_beat({'t': 1, 'who': 'Flyer', 'down': {'pose': 'curl', 'yaw': '45'}}, flyer, cast)
+    assert log.get('errors') and before_kb == curves(flyer) and not jobs, f'a string down yaw crashed or authored: {log.get("errors")}'
+    print('PASS boolean durations accepted (power_up/aura/fly s/transform hold); string knockback/down values rejected cleanly')
+
+
+def walk_speed_guard_case():
+    """speed: 0 raised ZeroDivisionError in the cadence math; a negative one silently teleported. Both are rejected now."""
+    clean()
+    ch = make_char('Walker')
+    for spd in (0, -3):
+        try:
+            lo.walk(scene, ch.root, ch.hips, ch.shoulders, [(0.0, 0.0), (4.0, 0.0)], 20, speed_studs_s=spd)
+            raise AssertionError(f'walk speed {spd} was accepted')
+        except ValueError:
+            pass
+    info = lo.walk(scene, ch.root, ch.hips, ch.shoulders, [(0.0, 0.0), (4.0, 0.0)], 20, speed_studs_s=8)
+    assert info['f_end'] > info['f_start'], 'a normal walk broke'
+    print('PASS walk speed 0 / negative rejected with ValueError; a normal walk still bakes')
+
+
+for _kind in ('seated', 'lying', 'standing'):
     for _blocked in (False, True):
         attack_case(_kind, _blocked)
 
 walk_knockback_case()
 walk_dispatch_first_frame_case()
 upper_sway_case()
+no_walk_knockback_case()
+bool_durations_case()
+walk_speed_guard_case()
 partial_beat_case()
 huge_timing_case()
 fly_case([5, 2])
@@ -469,7 +529,17 @@ lint_fly_case([5, 2], expected=False, extra={'s': 1e9})
 lint_fly_case([5, 2], expected=False, extra={'s': 1e308})
 lint_beat_case({'t': 1.0, 'who': 'Caster', 'power_up': 1.0}, 'power_up')
 lint_beat_case({'t': 1.0, 'who': 'Caster', 'power_up': 1e9}, 'power_up', expected=False)
+lint_beat_case({'t': 1.0, 'who': 'Caster', 'power_up': False}, 'power_up', expected=False)   # runtime rejects false (true = 1 s)
 lint_beat_case({'t': 1.0, 'who': 'Caster', 'aura': {'s': 1e9}}, 'aura', expected=False)
+lint_beat_case({'t': 1.0, 'who': 'Caster', 'aura': True}, 'aura')   # booleans are numbers to the engine (fight._dur)
 lint_beat_case({'t': 1.0, 'who': 'Caster', 'transform': {'hair': 'spiky', 's': 1e9}}, 'transform', expected=False)
+lint_beat_case({'t': 1.0, 'who': 'Caster', 'walk': [[3, 0]], 'speed': 0}, 'speed', expected=False)
+lint_beat_case({'t': 1.0, 'who': 'Caster', 'walk': [[3, 0]], 'speed': 'fast'}, 'speed', expected=False)
+lint_beat_case({'t': 1.0, 'who': 'Caster', 'knockback': {'from': 'Target', 'distance': '9'}}, 'knockback', expected=False)
+lint_beat_case({'t': 1.0, 'who': 'Caster', 'down': {'pose': 'curl', 'yaw': '45'}}, 'down', expected=False)
+lint_beat_case({'t': 1.0, 'who': 'Caster', 'shoot': True}, 'shoot', expected=False)
+lint_beat_case({'t': 1.0, 'who': 'Caster', 'shoot': {'target': 'Target', 'shots': 3, 'every': 0.4}}, 'shoot')
+lint_beat_case({'t': 1.0, 'who': 'Caster', 'shoot': {'target': 'Target', 'shots': 99}}, 'shoot', expected=False)
+lint_beat_case({'t': 1.0, 'who': 'Caster', 'attack': 'punch_R', 'target': 'Target'}, 'attack', cast_at=((-2, 0), (2, 0)))   # the string shorthand
 lint_scene_fps_case()
 print('RESULT PASS')

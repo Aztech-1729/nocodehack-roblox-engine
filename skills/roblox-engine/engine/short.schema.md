@@ -107,6 +107,7 @@ Story rules (story.py):
 | `outdoor` | false | set by `street` and `park` |
 | `park` | false | adds the park path |
 | `dress` | (appended) | list of dress entries and row entries (below) |
+| `weather` | `none` | `none`, `snow` or `rain` (outdoor presets only; anything else reads as clear sky). Sparse falling meshes, no volumes |
 
 `windows` and `doors` `wall` values use the same names as the walls above.
 
@@ -185,7 +186,7 @@ Story rules (story.py):
 - Kit names with scale factors (assets.py KIT_SCALE): furniture-kit, building-kit, car-kit, city-kit-suburban, city-kit-commercial, city-kit-roads, nature-kit, retro-urban-kit, mini-shop, food-kit.
 
 ### 5b. creatures (scene key: big creatures and custom models - creatures.py)
-A dragon, a monster, a robot, a car: placed and filmed like a prop, by name (shots `on`, `look`, `turn`, walks away from it).
+A dragon, a monster, a robot, a car: placed and filmed like a prop, by name (shots `on`, `look`, `turn`, walks away from it). Walking TO a creature stops 1.5 studs in front of it (a set-piece approach); grabbing or giving one is not supported (the story check warns). Its footprint blocks walks and knockback landings like any solid piece.
 | key | default | meaning |
 |---|---|---|
 | `name` | required | name used by shots / looks |
@@ -234,7 +235,7 @@ Each beat: `t` (seconds, required), `who` (cast name, required). Beats run in ti
 | `jump` | height in studs (true = 0.9) | squash-and-stretch hop |
 | `wiggle` | channel: `R`, `L`, `legR`, `legL`, `head`, `body` | oscillates that channel (waves) |
 | `wiggle_s` | seconds, default 0.8 | wiggle length |
-| `anim` | slug in assets/anims (`dance2`, `wave`, `cheer`, `point`, `laugh`, `shrug`, `salute`, `cower`, ... see assets/anims/LIBRARY.md) | plays Roblox's own R6 animation at `t` (anims.py). `loop` = seconds to keep repeating it (omit = once), `anim_speed` (default 1), `anim_skip` = channels to leave alone, e.g. `["legR","legL"]` while walking; legs are skipped automatically while seated |
+| `anim` | slug in assets/anims (`dance2`, `wave`, `cheer`, `point`, `laugh`, `shrug`, `salute`, `cower`, ... see assets/anims/LIBRARY.md) | plays Roblox's own R6 animation at `t` (anims.py). `loop` = seconds to keep repeating it (omit = once), `anim_speed` (default 1; must be positive — 0 divides by it, a negative one would loop forever), `anim_skip` = channels to leave alone, e.g. `["legR","legL"]` while walking; legs are skipped automatically while seated |
 | `face` | face kind | expression, set 2 frames before `t`, holds until the next `face` |
 | `talk` | seconds | mouth flaps on the current talkable expression (base must be talkable). Gestures unless `gesture: false` |
 | `gesture` | bool, default true | talk hand gestures: each line plays its own run from the talk bank (`poses.TALK`), picked by the line's mood (`face` + `say`: `!`/angry = jabs, `?` = half shrug, sad/worry = small, smug/grin = dismissive), never the same as the line before. Compact when seated or crowded; an arm that carries a prop keeps carrying |
@@ -249,15 +250,15 @@ Each beat: `t` (seconds, required), `who` (cast name, required). Beats run in ti
 | `dodge` | `back`, `R`, `L` | 1.5-stud dodge reached at `t`, returns over 8 frames |
 | `knockback` | `{from, distance: 8, height: 2}` | launched away from `from` (a cast name), lands on the back (+ dust). `get_up` afterwards works. The landing never touches another actor (standing or lying) or a set piece: the blast is turned or shortened |
 | `knockback` extras | `to: [x, y]`, `pose: "curl"`, `side: R/L` | `to` = the spot (studs) the root lands on (overrides `distance`); `pose: curl` = lands lying on its side, curled, face down, in a bigger crater (radius 2.6), the "defeated in a crater" meme; `get_up` rolls it back and stands up; `crater: false` = dust only (no crater for a street fight; default true for height >= 1.5 or distance >= 6) |
-| `shoot` | `{target, shots: 1, every: 0.25, side: "R", hit: true}` | a pistol appears in the hand (8 frames before `t`), the arm is raised and aimed AT `t`, shots fire from `t` + 2 frames every `every` s: muzzle flash, tracer, smoke, recoil, light flash, a gunshot sound each. `target` = a cast name (aims at the chest; the target jolts at each hit, `hit: false` = a miss) or `[x, y]` studs. Gun by Kimi (guns.py) |
+| `shoot` | `{target, shots: 1, every: 0.25, side: "R", hit: true}` | a pistol appears in the hand (8 frames before `t`), the arm is raised and aimed AT `t`, shots fire from `t` + 2 frames every `every` s: muzzle flash, tracer, smoke, recoil, light flash, a gunshot sound each. `target` = a cast name (aims at the chest; the target jolts at each hit, `hit: false` = a miss) or `[x, y]` studs; `shots` is capped at 24 and a late burst lengthens the scene. A shooter (or hit target) mid-walk stops and faces: the aim owns the body. Malformed values are reported as build errors, never a crash. Gun by Kimi (guns.py) |
 | story / scene `blood` | `true` | landed strikes and gun hits throw cartoon blood drops (matte dark red, ~0.4 s); with `bruises` the 3rd landed head strike also leaves a blood trickle at the mouth corner |
 | story / scene `bruises` | `true` | every landed head strike adds the next blue-violet bruise to the target's face from that moment on (right eye, left cheek, brow, left eye, right cheek). Scene continuity: give the next scene's cast `face_marks: ["bruise_eye_R", ...]` (also `blood_mouth`, `blood_brow`) |
 | `attack` flurry `aura` | `true` or `"#hex"` | an aura flares round the attacker during a flurry; OFF by default (street fights have none) |
 | `down` | `{pose: "curl", crater: true, side, yaw}` | at `t` (use 0) the character is already lying curled over its `at`, crater already there; auto acting, gaze and `look` leave it alone until `get_up` |
 | `fly` | `{to, height: 4, s: 1.0}` | `to` = one `[x, y]` point in studs (`[5, 2]`), a list of `[x, y]` waypoints (`[[2, 0], [5, 2]]`), or a cast name (another character; stops at guard distance). Every point must be finite and consecutive waypoints must differ (every segment needs a direction); a malformed or self-targeted `to` is reported and the WHOLE beat authors nothing (a `power_up`/`aura` in the same beat is skipped too). Follow with `land: true`. From the ground it pops straight up over 2 frames first (feet clear, then legs swing and body turns): no takeoff foot slide at any speed |
 | `land` | true or `{crater: true}` | descends to the ground with a bounce (+ dust); `crater` adds a crater and a thick smoke column that hangs ~1 s |
-| `power_up` | seconds | brace pose + flame aura (`aura_color`, default gold) |
-| `aura` | seconds or `{s, color}` | aura only |
+| `power_up` | seconds (`true` = 1) | brace pose + flame aura (`aura_color`, default gold). Boolean durations are numbers to the engine: `true` = 1 s, everywhere (`aura`, `transform`, `flurry` s, attack `hold`, beam times) |
+| `aura` | seconds or `{s, color}` (`true` = 1 s) | aura only |
 | `beam` | `{to, charge: 0.6, s: 1.0, color, hand: R}` | energy ball charges in the hand for `charge` s BEFORE `t` (the ball grows the whole time, a 2.8 s charge is fine), beam fires at `t` for `s` s at the target's chest (+ flash, sparkles). Add a `knockback` beat on the target ~0.15 s later |
 | `beam` extras | `hands: "both"` | two-hand wave: both arms pulled to one hip during the charge, ball between the hands, both thrust forward at `t` |
 | `beam` extras | `deflect: {after: 0.5, to: [x, y, z], hand: R}` | the target holds the beam on one raised palm (no flinch, no knockback), after `after` s flicks it: the beam bends at his hand and shoots to the world point `to` (studs, default up into the sky) until the beam ends, flash at the hand. `after` must fall INSIDE the frame-quantized beam: with both rounded to whole frames at the scene's fps, `after < s - 2` frames. A `to` closer than 0.5 m to the defender's palm is rejected on the final motion: the build logs an error, no beam is baked, and only the deflect's own palm/head/body keys are undone |

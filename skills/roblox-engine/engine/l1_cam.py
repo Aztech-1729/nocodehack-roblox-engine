@@ -223,7 +223,9 @@ def _mode(sc, spec, log, S, cast):
             need(v['down_deg'] >= 55, 'not top-down (>= 55 deg down)'); need(v['len_s'] >= 0.8, 'reveal shorter than 0.8 s'); need(v['in_frame'] >= 0.9, 'the subject leaves the frame')
             need(not falls or sh['f0'] >= min(falls), 'the reveal starts before the fall'); need(len(S) >= 2, 'nothing before the reveal')
     elif mode == 'punch_in':
-        ps = [sh for sh in S if sh.get('punch') is not None]; need(bool(ps), 'no punch-in shot')
+        ps_all = [sh for sh in S if sh.get('punch') is not None]   # a punchline on a PROP: the face checks do not apply (they
+        ps = [sh for sh in ps_all if sh.get('focus') in cast]      # crashed here on cast[None] before)
+        need(bool(ps) or not ps_all, 'no punch-in shot on a character')
         if ps:
             sh = ps[0]; who = sh['focus']; fp = int(round(sh['punch'] * fps)); a, b = max(sh['f0'], fp - 5), min(sh['f1'], fp + 6)
             _, ha = _size(sc, sh['cam'], cast[who].head_mesh, a); _, hb = _size(sc, sh['cam'], cast[who].head_mesh, b)
@@ -232,7 +234,7 @@ def _mode(sc, spec, log, S, cast):
             need(_face(sh, who) >= 0.9, 'the punchline face is not readable')
     elif mode == 'two_shot_react':
         two = [sh for sh in S if len([x for x in sh.get('on', []) if x in cast]) == 2 and sh.get('kind') != 'close']
-        good = [sh for sh in two if all(_in(sh, x) >= 0.9 and _face(sh, x) >= 0.5 for x in sh['on'][:2])]
+        good = [sh for sh in two if all(x in cast and _in(sh, x) >= 0.9 and _face(sh, x) >= 0.5 for x in sh['on'][:2])]
         re_ = [i for i, sh in enumerate(S) if sh.get('react') and sh.get('kind') == 'close']
         v.update(two_shots=len(two), both_faces=len(good), reactions=len(re_), two_share=round(sum(sh['f1'] - sh['f0'] + 1 for sh in two) / max(1, n), 2))
         need(two and len(good) == len(two), 'a two-shot does not show both faces'); need(len(re_) >= 2, 'fewer than 2 reaction close-ups')

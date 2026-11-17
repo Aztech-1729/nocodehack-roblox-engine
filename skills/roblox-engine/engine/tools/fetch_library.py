@@ -177,8 +177,7 @@ def collect_anims(files):
             if isinstance(w, list): t = ''.join(x.get('text', '') for x in w if isinstance(x, dict))
         except ValueError: pass
         i = t.find('{')
-        if i < 0: print('FAIL', s if (s := fn) else fn, 'no JSON in the saved MCP result'); continue
-        t = t[i:]; d, _ = json.JSONDecoder().raw_decode(t)
+        if i < 0: print('FAIL', fn, 'no JSON in the saved MCP result'); continue   # (the old walrus printed the path twice, never the slug)
         for s, a in d.items():
             if s not in want: print('SKIP unknown', s); continue
             if a.get('refused') or re.search(r'permission|authoriz|denied|\b40[13]\b', str(a.get('err') or ''), re.I):

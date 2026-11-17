@@ -92,6 +92,12 @@ MAX_EFFECT_FRAMES = 1200   # a fight effect (fly, beam, aura, power-up...) may s
                            # lint, which cannot import bpy.
 
 
+def _dur(x):
+    """Writer-facing seconds for an effect duration: `true` = 1 s and `false` = 0 (stories pass booleans and 1.13.0 read them
+    as numbers, so `aura: true` keeps meaning a 1-second aura instead of a rejected beat). Anything else passes through."""
+    return 1.0 if x is True else (0.0 if x is False else x)
+
+
 def _frames(seconds, fps, what):
     """Seconds -> frames for every fight effect duration: finite and inside MAX_EFFECT_FRAMES (the caller checks the sign).
     tools/story_lint.py mirrors this rule and parses the budget above; fight_regress asserts the two agree."""
@@ -132,7 +138,7 @@ def _fly_preflight(b, ch, cast, fps):
     h = fl.get('height', 4)
     if not _finite_number(h) or h < 0:
         raise ValueError(f'fly height must be a finite nonnegative number, not {h!r}')
-    duration = fl.get('s', 1.0)
+    duration = _dur(fl.get('s', 1.0))
     if not _finite_number(duration) or duration <= 0:
         raise ValueError(f'fly s must be a finite positive number, not {duration!r}')
     _frames(duration, fps, 'fly s')
@@ -565,6 +571,8 @@ def knockback(sc, ch, direction_xy, frame, distance_studs=8, height_studs=2, pos
     """24-frame sampled parabola, back landing and six-frame bounce; returns impact frame.
     pose='curl': lands curled on its side (CURL) instead of flat on its back."""
     direction = _direction(direction_xy)
+    if not _finite_number(distance_studs) or not _finite_number(height_studs):
+        raise ValueError(f'knockback distance/height must be finite numbers, not {distance_studs!r}/{height_studs!r}')
     if distance_studs < 0 or height_studs < 0:
         raise ValueError('knockback distances must be nonnegative')
     if pose not in (None, 'curl'):
@@ -713,7 +721,7 @@ def story_beat(sc, b, ch, f, fps, cast, face_sched, fallen, settle, vfx_jobs, lo
             # on that exact frame), camera shake, then the aura stays (R165, creator idea 'Goku vs Vegeta with transformation').
             import rig as rig_   # aliased: a bare 'import rig' made rig LOCAL to story_beat and crashed every other beat
             tr = b['transform'] if isinstance(b['transform'], dict) else {'hair': str(b['transform'])}
-            d = sec(tr.get('s', 2.0), 'transform s'); fx = f + int(0.7 * d); col = tr.get('aura', '#FFE15A')
+            d = sec(_dur(tr.get('s', 2.0)), 'transform s'); fx = f + int(0.7 * d); col = tr.get('aura', '#FFE15A')
             poses.beat(sc, ch, MOVES['power_up'], f + 4, move=4, over=0, settle=0)
             FACE(who, tr.get('face', 'scream'), f + 2); FACE(who, tr.get('face_after', 'smug'), fx + 6)
             old = [o for o in ch.hair_pivot.children_recursive if o.type == 'MESH']
@@ -733,18 +741,18 @@ def story_beat(sc, b, ch, f, fps, cast, face_sched, fallen, settle, vfx_jobs, lo
                     o.keyframe_insert('hide_render', frame=fr_); o.keyframe_insert('hide_viewport', frame=fr_)
             vfx_jobs.append(lambda: vfx.ground_power(sc, ch, f, fx + 4))
             sc.frame_set(fx); hp_ = ch.head_mesh.matrix_world.translation.copy()
-            vfx_jobs.append(lambda: vfx.aura(sc, ch, f + d // 3, fx + sec(tr.get('hold', 2.0), 'transform hold'), col))
+            vfx_jobs.append(lambda: vfx.aura(sc, ch, f + d // 3, fx + sec(_dur(tr.get('hold', 2.0)), 'transform hold'), col))
             vfx_jobs.append(lambda: vfx.impact_flash(sc, ch.head_mesh.matrix_world.translation.copy(), fx, '#FFFFFF'))
             log.setdefault('impact_frames', []).extend([fx, fx + 3])
             settle[who] = fx + 8
         if 'aura' in b:
             a = b['aura'] if isinstance(b['aura'], dict) else {'s': b['aura']}
-            d2 = sec(a.get('s', 2), 'aura s'); col2 = a.get('color', b.get('aura_color', '#FFD23F'))
+            d2 = sec(_dur(a.get('s', 2)), 'aura s'); col2 = a.get('color', b.get('aura_color', '#FFD23F'))
             vfx_jobs.append(lambda: vfx.aura(sc, ch, f, f + d2, col2))
         if 'fly' in b:   # {"to": [x, y], [[x, y], ...] or a cast name, "height": studs, "s": seconds}
             fl = b['fly']
             if not isinstance(fl, dict): err('fly must be {"to": [x, y], [[x, y], ...] or a cast name}'); return
-            to = fl.get('to'); h = fl.get('height', 4); duration = fl.get('s', 1.0)
+            to = fl.get('to'); h = fl.get('height', 4); duration = _dur(fl.get('s', 1.0))
             if not _finite_number(h) or h < 0: err(f'fly height must be a finite nonnegative number, not {h!r}'); return
             if not _finite_number(duration) or duration <= 0: err(f'fly s must be a finite positive number, not {duration!r}'); return
             d = sec(duration, 'fly s')
@@ -770,6 +778,7 @@ def story_beat(sc, b, ch, f, fps, cast, face_sched, fallen, settle, vfx_jobs, lo
             if dn.get('pose', 'curl') != 'curl': err(f"down pose {dn.get('pose')!r} is not supported (curl)"); return
             side_ = dn.get('side', 'R'); sc.frame_set(f)
             if 'yaw' in dn:
+                if not _finite_number(dn['yaw']): err(f"down yaw must be a finite number, not {dn['yaw']!r}"); return
                 ch.root.rotation_euler.z = math.radians(dn['yaw']); ch.root.keyframe_insert('rotation_euler', frame=f)
             c0 = ch.root.matrix_world.translation.copy()
             down(sc, ch, f, (c0.x, c0.y), side=side_)
@@ -782,6 +791,7 @@ def story_beat(sc, b, ch, f, fps, cast, face_sched, fallen, settle, vfx_jobs, lo
             for sp_ in log.get('fall_spans', []):
                 if sp_[0] == who and sp_[2] > f: sp_[2] = f
             if isinstance(b['land'], dict) and b['land'].get('crater'):   # lands in a crater with a smoke column that hangs ~1 s
+                log.setdefault('craters', {})[who] = 2.0
                 vfx_jobs.append(lambda: vfx.crater(sc, _ground(ch, sc, f + 6), f + 6, radius=2.0))
                 vfx_jobs.append(lambda: vfx.smoke_column(sc, _ground(ch, sc, f + 6), f + 6))
             else:
@@ -794,7 +804,8 @@ def story_beat(sc, b, ch, f, fps, cast, face_sched, fallen, settle, vfx_jobs, lo
                 mv_ = a['flurry']
                 if not (isinstance(mv_, list) and len(mv_) >= 2 and all(m_ in ('punch_R', 'punch_L', 'kick_R', 'uppercut_R', 'tap_R') for m_ in mv_)):
                     err('flurry must be a list of 2+ strikes (punch_R, punch_L, kick_R, uppercut_R, tap_R)'); return
-                n_ = len(mv_); tot = sec(a['s'], 'flurry s') if isinstance(a.get('s'), (int, float)) and a['s'] > 0 else int(round(.3 * fps * (n_ - 1)))
+                n_ = len(mv_); s_val = _dur(a.get('s'))
+                tot = sec(s_val, 'flurry s') if isinstance(s_val, (int, float)) and s_val > 0 else int(round(.3 * fps * (n_ - 1)))
                 w_ = [1.4 - i / max(1, n_ - 2) * .8 for i in range(n_ - 1)] if n_ > 2 else [1.0]; gaps = [max(4, int(round(tot * x / sum(w_)))) for x in w_]
                 gaps = [g_ + (1 if g_ in (3, 8, 13) else 0) for g_ in gaps]   # a wind-up key must never land on the previous contact frame
                 fr_ = f; first_fr = f
@@ -813,7 +824,7 @@ def story_beat(sc, b, ch, f, fps, cast, face_sched, fallen, settle, vfx_jobs, lo
             rec = []
             blk = bool(a.get('blocked'))
             r = attack(sc, ch, tgt, a['move'], f, rec, blocked=blk, catch_hand=a.get('catch'), no_look=bool(a.get('no_look')),
-                       hold=sec(a['hold'], 'attack hold') if isinstance(a.get('hold'), (int, float)) and a['hold'] > 0 and blk else 0)
+                       hold=sec(_dur(a.get('hold')), 'attack hold') if isinstance(a.get('hold'), (int, float)) and a['hold'] > 0 and blk else 0)
             log.setdefault('fight', []).append({'t': b['t'], 'who': who, 'move': a['move'], 'target': tgt.name,
                                                 'error_cm': round(rec[-1]['error_m'] * 100, 2), 'step_studs': round(rec[-1]['step_m'] / S, 2), **({'blocked': True} if blk else {})})
             quiet = blk or a['move'] == 'tap_R'   # stopped / tapped: a small flash, no impact frame (no camera shake)
@@ -835,6 +846,10 @@ def story_beat(sc, b, ch, f, fps, cast, face_sched, fallen, settle, vfx_jobs, lo
             settle[who] = dodge(sc, ch, f, side=b['dodge'] if b['dodge'] in ('back', 'R', 'L') else 'back')
         if 'knockback' in b:   # {"from": name, "distance": studs, "height": studs}; lands on the back (get_up works)
             k = b['knockback'] if isinstance(b['knockback'], dict) else {'from': b['knockback']}
+            if 'distance' in k and not _finite_number(k['distance']):
+                err(f'knockback distance must be a finite number, not {k["distance"]!r}'); return
+            if 'height' in k and not _finite_number(k['height']):
+                err(f'knockback height must be a finite number, not {k["height"]!r}'); return
             src = foe(k['from']) if isinstance(k.get('from'), str) else None
             sc.frame_set(f); p0 = ch.root.matrix_world.translation
             dv = (p0 - src.root.matrix_world.translation) if src else ch.root.matrix_world.to_3x3() @ Vector((0, 1, 0))
@@ -894,6 +909,7 @@ def story_beat(sc, b, ch, f, fps, cast, face_sched, fallen, settle, vfx_jobs, lo
                 bc_ = body_center(sc, ch, end); log.setdefault('notes', []).append(f"t{b['t']} {who} lands curled, body centre {bc_.x / S:.1f},{bc_.y / S:.1f} studs")
                 vfx_jobs.append(lambda: vfx.crater(sc, body_center(sc, ch, end), end, radius=CURL_CRATER, big=True))
             elif k.get('crater', True) and (k.get('height', 2) >= 1.5 or dist >= 6):   # a real blast ("crater": false = street brawl, dust only): the landing leaves a CRATER (DBZ ground damage, R172)
+                log.setdefault('craters', {})[who] = 1.8   # the landing top-down fits body + crater: the VFX is built after the cameras
                 vfx_jobs.append(lambda: vfx.crater(sc, _ground(ch, sc, end), end))
             else:
                 vfx_jobs.append(lambda: vfx.dust_burst(sc, _ground(ch, sc, end), end))
@@ -905,7 +921,7 @@ def story_beat(sc, b, ch, f, fps, cast, face_sched, fallen, settle, vfx_jobs, lo
             if not isinstance(target_name, str): err('beam.to must be another character name'); return
             tgt = foe(target_name)
             if tgt is None: return
-            duration, charge = bm.get('s', 1.0), bm.get('charge', 0.6)
+            duration, charge = _dur(bm.get('s', 1.0)), _dur(bm.get('charge', 0.6))
             if not _finite_number(duration) or duration <= 0:
                 err(f'beam.s must be a finite positive number, not {duration!r}'); return
             if not _finite_number(charge) or charge < 0:
@@ -931,7 +947,7 @@ def story_beat(sc, b, ch, f, fps, cast, face_sched, fallen, settle, vfx_jobs, lo
                     err(f"beam deflect.to must be three finite [x, y, z] studs, not {dfl['to']!r}"); return
                 if dfl.get('hand', 'R') not in ('R', 'L'):
                     err(f"beam deflect.hand must be R or L, not {dfl.get('hand')!r}"); return
-                after = dfl.get('after', 0.5)
+                after = _dur(dfl.get('after', 0.5))
                 if not _finite_number(after) or after <= 0:
                     err(f'beam deflect.after must be a finite positive number, not {after!r}'); return
             f0 = f - sec(charge, 'beam charge'); f1 = f + sec(duration, 'beam s')
@@ -996,6 +1012,8 @@ def story_beat(sc, b, ch, f, fps, cast, face_sched, fallen, settle, vfx_jobs, lo
                     palm = hold['dp'].matrix_world @ tip(hold['dh'])
                     if (Vector(dfl['to']) * S - palm).length < .5:
                         _rollback_keys(dfl_pre, dfl_post)   # only the deflect's own palm/head/body keys go
+                        if f + 2 in log.get('impact_frames', []):   # no beam, no shake for it either
+                            log['impact_frames'].remove(f + 2)
                         raise ValueError(f"deflect.to {list(dfl['to'])} is on the defender's palm (< 0.5 m): beam omitted")
                 out = vfx.charge_ball(sc, ch, 'both' if both else hand, f0, f, col4, max(1.0, bsz / 2))
                 sc.frame_set(f); bpy.context.view_layer.update(); st = sum((ch.arm[h].matrix_world @ tip(h) for h in hs), Vector()) / len(hs)

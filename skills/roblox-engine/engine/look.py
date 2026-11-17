@@ -386,7 +386,6 @@ def _lowkey(sc, enabled):
     """Tier-local lighting; retain the R202 state for draft and paired measurements."""
     if not sc.get('lowkey_ready'):
         if not enabled: return
-        sc['lowkey_ready'] = True
         sc['lowkey_world'] = sc.world
         sc['lowkey_exposure'] = sc.view_settings.exposure
         sc['lowkey_look'] = sc.view_settings.look
@@ -512,7 +511,8 @@ def _lowkey(sc, enabled):
                 if bs is None: continue
                 mat['lowkey_dark_color'] = list(bs.inputs['Base Color'].default_value)
                 mat['lowkey_dark_emission'] = bs.inputs['Emission Strength'].default_value
-    if not sc.get('lowkey_ready'): return
+        sc['lowkey_ready'] = True   # only AFTER the whole setup: an exception mid-way used to leave 'ready' set with the dark
+    if not sc.get('lowkey_ready'): return   # world missing, and the next activate ran against half-initialized state
     sc['lowkey_active'] = enabled
     sc.world = sc['lowkey_dark_world'] if enabled else sc['lowkey_world']
     sc.view_settings.exposure = (-.08 if sc.get('look_mood') == 'default' and not sc.get('look_outdoor') else
