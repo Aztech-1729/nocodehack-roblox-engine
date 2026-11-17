@@ -30,6 +30,26 @@ def F(t, fps):
     return int(round(float(t) * fps))
 
 
+def fight_walk_span(walk_spans, who, f):
+    """The walk that owns frame f for a fight beat — inclusive at BOTH ends: a knockback on the walk's FIRST frame still
+    interrupts it and clears the walk's keys through the walk's own end (was `span[0] < f`: the first frame was orphaned)."""
+    span = walk_spans.get(who)
+    return span if span and span[0] <= f <= span[1] else None
+
+
+def run_vfx_jobs(jobs, log):
+    """Deferred fight effects (queued by fight.story_beat, baked here after the cameras on the final motion). A failed job is
+    reported as an error and leaves NO objects behind: whatever it created before raising is removed whole."""
+    for job in jobs:
+        made = set(bpy.data.objects)
+        try:
+            for o in job(): o.name = 'VFX ' + o.name
+        except (ValueError, AssertionError, KeyError) as e:
+            for o in set(bpy.data.objects) - made:
+                bpy.data.objects.remove(o, do_unlink=True)
+            log.setdefault('errors', []).append(f'vfx: {str(e)[:80]}')
+
+
 def yaw_to(src_xy, dst_xy):
     dx, dy = dst_xy[0] - src_xy[0], dst_xy[1] - src_xy[1]
     return math.degrees(math.atan2(dx, -dy))
@@ -2101,8 +2121,7 @@ def build(spec, log):
                     break
             else: log.setdefault('errors', []).append(f"t{b['t']} {b['who']} jump rejected: {hit}")
         if any(k in b for k in FIGHT_KEYS):
-            span = walk_spans.get(b['who'])
-            active_walk = span if span and span[0] < f <= span[1] else None
+            active_walk = fight_walk_span(walk_spans, b['who'], f)
             fight_beat(sc, b, ch, f, fps, cast, face_sched, fallen, settle, vfx_jobs, log, active_walk=active_walk)
         if 'wiggle' in b:
             poses.wiggle(sc, ch, b['wiggle'], f, f + F(b.get('wiggle_s', 0.8), fps))
@@ -2691,11 +2710,7 @@ def build(spec, log):
     # fight VFX: baked AFTER the cameras are chosen (auras/beams must not steer framing) and after all motion is final
     mk = sorted(sc.timeline_markers, key=lambda m: m.frame)
     cam_at = lambda fr: next((m.camera for m in reversed(mk) if m.frame <= fr), mk[0].camera if mk else None)
-    for job in vfx_jobs:
-        try:
-            for o in job(): o.name = 'VFX ' + o.name
-        except (ValueError, AssertionError, KeyError) as e:
-            log.setdefault('errors', []).append(f'vfx: {str(e)[:80]}')
+    run_vfx_jobs(vfx_jobs, log)
     for fr in log.get('impact_frames', []):   # every hit shakes the camera that shows it
         if cam_at(fr): ia.cam_shake(sc, cam_at(fr), fr, 0.06, seed=fr)
     # FACE ACCENTS ON THE CUTS (after the shots: it needs the final cut list): a close-up lands on a changed face, a blink / mouth
