@@ -3,6 +3,7 @@
 Author actions in timeline order and bake following VFX after character animation.
 """
 import math
+import re
 
 import bpy
 from mathutils import Vector
@@ -75,6 +76,71 @@ def _direction(xy):
     return v.normalized()
 
 
+def _finite_number(value):
+    if not isinstance(value, (int, float)) or isinstance(value, bool): return False
+    try: return math.isfinite(float(value))
+    except (OverflowError, ValueError): return False
+
+
+def _finite_coords(value, size):
+    return isinstance(value, (list, tuple)) and len(value) == size and all(_finite_number(v) for v in value)
+
+
+MAX_EFFECT_FRAMES = 1200   # a fight effect (fly, beam, aura, power-up...) may span at most this many frames (~50 s at 24 fps);
+                           # longer durations are REJECTED, never clamped (a huge finite value would key every frame for minutes
+                           # or overflow the conversion). tools/story_lint.py parses this constant: one budget for runtime and
+                           # lint, which cannot import bpy.
+
+
+def _frames(seconds, fps, what):
+    """Seconds -> frames for every fight effect duration: finite and inside MAX_EFFECT_FRAMES (the caller checks the sign).
+    tools/story_lint.py mirrors this rule and parses the budget above; fight_regress asserts the two agree."""
+    if not _finite_number(seconds):
+        raise ValueError(f'{what} must be a finite number, not {seconds!r}')
+    if not _finite_number(fps) or fps <= 0:
+        raise ValueError(f'{what} needs a positive finite scene fps, not {fps!r}')
+    try:
+        frames = max(1, int(round(seconds * fps)))
+    except (OverflowError, ValueError):
+        frames = MAX_EFFECT_FRAMES + 1   # un-timable = over budget
+    if frames > MAX_EFFECT_FRAMES:
+        raise ValueError(f'{what} is {frames} frames, over the {MAX_EFFECT_FRAMES}-frame effect budget -> shorten it or split the beat')
+    return frames
+
+
+def _fly_points(cast, ch, to):
+    """The validated waypoint list (studs) of a story fly: a cast name must be ANOTHER character, else finite [x, y] points.
+    No scene access, nothing authored: story_beat runs it first so a bad fly rejects the whole beat."""
+    if isinstance(to, str):
+        if to not in cast or cast[to] is ch:
+            raise ValueError(f'fly to {to!r} must be another character in the cast')
+        return None
+    if _finite_coords(to, 2):
+        return [to]
+    if isinstance(to, (list, tuple)) and to and all(_finite_coords(p, 2) for p in to):
+        return list(to)
+    raise ValueError('fly to must be a finite [x, y] point, a list of them, or a cast name')
+
+
+def _fly_preflight(b, ch, cast, fps):
+    """Side-effect-free check of the beat's fly payload: shape, target, finite height/duration, distinct waypoints, frame
+    budget. Raised errors reject the WHOLE beat before power_up/transform/aura can key or queue anything."""
+    fl = b.get('fly')
+    if not isinstance(fl, dict):
+        raise ValueError('fly must be {"to": [x, y], [[x, y], ...] or a cast name}')
+    pts = _fly_points(cast, ch, fl.get('to'))
+    h = fl.get('height', 4)
+    if not _finite_number(h) or h < 0:
+        raise ValueError(f'fly height must be a finite nonnegative number, not {h!r}')
+    duration = fl.get('s', 1.0)
+    if not _finite_number(duration) or duration <= 0:
+        raise ValueError(f'fly s must be a finite positive number, not {duration!r}')
+    _frames(duration, fps, 'fly s')
+    for a, c in zip(pts or (), (pts or ())[1:]):   # fly() rejects duplicate segments too; here it costs nothing authored
+        if math.hypot(c[0] - a[0], c[1] - a[1]) < 1e-6:
+            raise ValueError('fly waypoints must be distinct (every segment needs a direction)')
+
+
 def _surface(obj, origin, drop=0.0, cheek=0.0, offset=0.0):
     """Ray onto the actual mesh, including its evaluated bevel and transforms. drop = aim that far (local) below the centre."""
     mesh = obj.evaluated_get(bpy.context.evaluated_depsgraph_get())
@@ -101,6 +167,45 @@ def _restore(snap):
         for k, (co, hl, hr, ip, tl, tr) in zip(fc.keyframe_points, keys):
             k.co = co; k.interpolation = ip; k.handle_left_type = tl; k.handle_right_type = tr; k.handle_left = hl; k.handle_right = hr
         fc.update()
+
+
+def _key_table(objs):
+    """(name, path, index) -> (object, fcurve, {frame: key tuple}) snapshots, so a rejected effect can undo exactly its own keys."""
+    out = {}
+    for o in objs:
+        for fc in space.fcurves_of(o):
+            out[(o.name, fc.data_path, fc.array_index)] = (o, fc, {round(k.co.x): (tuple(k.co), tuple(k.handle_left), tuple(k.handle_right),
+                                                                    k.interpolation, k.handle_left_type, k.handle_right_type) for k in fc.keyframe_points})
+    return out
+
+
+def _drop_fcurve(obj, fc):
+    """Remove an fcurve whose keys were all rolled back: a rejected effect must leave no curve behind either."""
+    ad = obj.animation_data
+    if not (ad and ad.action): return
+    try:
+        if hasattr(ad.action, 'fcurves'): ad.action.fcurves.remove(fc); return
+        from bpy_extras import anim_utils
+        cb = anim_utils.action_get_channelbag_for_slot(ad.action, ad.action_slot)
+        if cb: cb.fcurves.remove(fc)
+    except Exception: pass
+
+
+def _rollback_keys(pre, post):
+    """Restore each curve of `pre` to its snapshotted keys, keeping any key a LATER pass added after `post` was taken
+    (depenetration and later beats may touch the same pivots: a rejected deflect owns only what it authored). Curves the
+    effect CREATED (absent from `pre`) lose its keys the same way and are dropped when they end up empty."""
+    for (name_, path_, idx_), (o, fc, before_) in pre.items():
+        post_ = post.get((name_, path_, idx_), (o, fc, {}))[2]
+        later = [(tuple(k.co), tuple(k.handle_left), tuple(k.handle_right), k.interpolation, k.handle_left_type, k.handle_right_type)
+                 for k in fc.keyframe_points if round(k.co.x) not in before_ and round(k.co.x) not in post_]
+        _restore([(fc, list(before_.values()) + later)])
+    for (name_, path_, idx_), (o, fc, post_) in post.items():
+        if (name_, path_, idx_) in pre: continue
+        later = [(tuple(k.co), tuple(k.handle_left), tuple(k.handle_right), k.interpolation, k.handle_left_type, k.handle_right_type)
+                 for k in fc.keyframe_points if round(k.co.x) not in post_]
+        _restore([(fc, later)])
+        if not later: _drop_fcurve(o, fc)
 
 
 def _footwork(sc, ch, start, arrive, frame, position, yaw, back, back_yaw, snap):
@@ -188,8 +293,12 @@ def attack(sc, attacker, target, move, frame, log, blocked=False, catch_hand=Non
     tap = move == 'tap_R'
     side = 'L' if move == 'punch_L' else 'R'
     pivot = attacker.leg[side] if foot else attacker.arm[side]
+    _at(sc, frame); target_standing = lo._standing_pose(target)
+    caught = blocked and target_standing   # a seated/lying defender cannot raise a catch hand: the strike meets the body
+    target_base = target.root.location.copy()
     mesh = target.torso if foot else target.head_mesh
-    if blocked:   # the fist meets the defender's raised hand
+    catch = None
+    if caught:   # only a standing defender is posed to catch with a raised hand
         catch = catch_hand or _CATCH.setdefault(target.name, 'L' if side == 'R' else 'R')
         _CATCH[target.name] = catch
         mesh = interact.limb_mesh(target.arm[catch])
@@ -201,7 +310,7 @@ def attack(sc, attacker, target, move, frame, log, blocked=False, catch_hand=Non
     lo._hold(attacker, start)
     lo.clear_keys([attacker.root] + list(attacker.hips), start + 1)
     snap = _snap([attacker.root] + list(attacker.hips))   # after the hold: every curve exists
-    if blocked: _catch_pose(sc, target, base, catch, frame, foot, hold)
+    if caught: _catch_pose(sc, target, base, catch, frame, foot, hold)
     _at(sc, frame)
     heading = mesh.matrix_world.translation - base
     yaw = math.atan2(heading.x, -heading.y)
@@ -217,29 +326,30 @@ def attack(sc, attacker, target, move, frame, log, blocked=False, catch_hand=Non
     _pose(attacker, MOVES[move], frame, legs=False)
     _pose(attacker, FIGHT_STANCE, frame + 6, legs=False)
 
-    # Reaction starts at contact so the target cannot recoil before the fist arrives.
+    # A seated/lying target is still struck, but keeps every one of its authored animation keys.
     reaction = 'hit_body' if foot else 'hit_up' if move == 'uppercut_R' else 'hit_head_L' if move == 'punch_L' else 'hit_head'
-    if tap:   # a flick of the head, nothing more
-        poses.beat(sc, target, TAP_HIT, frame + 2, move=2, antic=0, over=0, settle=0)   # leaning back with the tap also clears the arm
-        poses.beat(sc, target, {'head': (0, 0, 0), 'body': (0, 0, 0)}, frame + 12, move=7, antic=0, over=0, settle=0)
-    elif not blocked:
-        poses.beat(sc, target, MOVES[reaction], frame + 2, move=2, antic=0, over=0, settle=0)
-        poses.beat(sc, target, FIGHT_STANCE, frame + 8, move=4, antic=0, over=0, settle=0)
-    _at(sc, frame)
-    target_base = target.root.location.copy()
-    direction = _direction(target_base - base)
-    # STAGGER STEP back (planted feet), not a root shove: the 0.22 m push in 4 frames dragged the soles 11 cm (Goku vs
-    # Vegeta s02, R169). A knockback that starts on this hit simply overrides the root from its own frame.
-    # A target hit mid-walk stops walking: its later root/leg keys fought the stagger (Dave 7 cm, t_fight_glide).
-    lo._hold(target, frame - 1); _at(sc, frame); lo._hold(target, frame)
-    lo.clear_keys([target.root] + list(target.hips), frame + 1)
-    g_ = target_base + direction * .22
-    if not (blocked or tap):   # a stopped strike or a tap does not push the defender
-        lo.step_to(sc, target, (g_.x, g_.y), frame, frames_per_step=4)
-        FACE(target.name, 'angry' if foot else 'scream', frame)
-        FACE(target.name, 'angry', frame + 8)
-    elif tap:
-        FACE(target.name, 'o', frame)
+    if target_standing:
+        if tap:   # a flick of the head, nothing more
+            poses.beat(sc, target, TAP_HIT, frame + 2, move=2, antic=0, over=0, settle=0)   # leaning back with the tap also clears the arm
+            poses.beat(sc, target, {'head': (0, 0, 0), 'body': (0, 0, 0)}, frame + 12, move=7, antic=0, over=0, settle=0)
+        elif not blocked:
+            poses.beat(sc, target, MOVES[reaction], frame + 2, move=2, antic=0, over=0, settle=0)
+            poses.beat(sc, target, FIGHT_STANCE, frame + 8, move=4, antic=0, over=0, settle=0)
+        _at(sc, frame)
+        target_base = target.root.location.copy()
+        direction = _direction(target_base - base)
+        # STAGGER STEP back (planted feet), not a root shove: the 0.22 m push in 4 frames dragged the soles 11 cm (Goku vs
+        # Vegeta s02, R169). A knockback that starts on this hit simply overrides the root from its own frame.
+        # A target hit mid-walk stops walking: its later root/leg keys fought the stagger (Dave 7 cm, t_fight_glide).
+        lo._hold(target, frame - 1); _at(sc, frame); lo._hold(target, frame)
+        lo.clear_keys([target.root] + list(target.hips), frame + 1)
+        g_ = target_base + direction * .22
+        if not (blocked or tap):   # a stopped strike or a tap does not push the defender
+            lo.step_to(sc, target, (g_.x, g_.y), frame, frames_per_step=4)
+            FACE(target.name, 'angry' if foot else 'scream', frame)
+            FACE(target.name, 'angry', frame + 8)
+        elif tap:
+            FACE(target.name, 'o', frame)
 
     # Contact belongs to the distal limb VOLUME, rather than a point buried inside the fist.
     limb = interact.limb_mesh(pivot)
@@ -252,11 +362,11 @@ def attack(sc, attacker, target, move, frame, log, blocked=False, catch_hand=Non
     drop = .40 if foot else (.14 if move == 'uppercut_R' else 0.0 if tap else .20)
     aims = [(mesh, drop, 0), (mesh, .45 if foot else 0, 0),
             (mesh, drop, .15), (mesh, drop, -.15)]
-    if blocked:   # toward the hand end of the raised arm
+    if caught:   # toward the hand end of the raised arm
         aims = [(mesh, d, c) for d in (.40, .30, .45, .20) for c in (0, .12, -.12)]
     elif tap:     # the brow: at the head's centre or just below (hair accessories stand above it and block a higher aim)
         aims = [(mesh, d, c) for d, c in TAP_AIMS] + [(target.torso, d, 0) for d in (-.25, -.1, 0)]   # else the upper chest (a high head contact can be blocked by the defender's own shoulders)
-    if not foot and not blocked and not tap:
+    if not foot and not caught and not tap:
         aims.extend((target.torso, drop, 0) for drop in (-.25, 0, .25))
     # Retry from a flank when the head/hair or the recovery blocks a frontal strike.
     for angle in (0, -25, 25, -45, 45):
@@ -451,7 +561,7 @@ def get_up_curled(sc, ch, frame):
     return e
 
 
-def knockback(sc, ch, direction_xy, frame, distance_studs=8, height_studs=2, pose=None, side='R'):
+def knockback(sc, ch, direction_xy, frame, distance_studs=8, height_studs=2, pose=None, side='R', walk_end=None):
     """24-frame sampled parabola, back landing and six-frame bounce; returns impact frame.
     pose='curl': lands curled on its side (CURL) instead of flat on its back."""
     direction = _direction(direction_xy)
@@ -463,6 +573,17 @@ def knockback(sc, ch, direction_xy, frame, distance_studs=8, height_studs=2, pos
     _at(sc, frame)
     base, rotation = ch.root.location.copy(), ch.root.rotation_euler.copy()
     end = frame + 24
+    root_parts = [ch.root] + list(ch.hips)
+    arms = list(ch.arms_piv)
+    if walk_end is not None:   # only a WALKING victim (our fix on PR #2: without a walk this deleted the strike's stagger keys)
+        _at(sc, frame - 1); lo._hold(ch, frame - 1)
+        for arm in arms: arm.keyframe_insert('rotation_euler', frame=frame - 1)
+        _at(sc, frame); lo._hold(ch, frame)
+        for arm in arms: arm.keyframe_insert('rotation_euler', frame=frame)
+        # An active walk keys root/hips/arms EVERY frame (and the build leans/sways the torso on ch.upper through it), so a fixed
+        # cleanup window let its later keys straighten the body mid-fall. Remove the remaining keys through that walk's own end.
+        # Keys beyond the owned interval stay untouched.
+        lo.clear_keys(root_parts + arms + [ch.upper], frame + 1, max(end, walk_end))
     poses.beat(sc, ch, MOVES['hit_head'], frame + 6, move=4, over=0, settle=0)
     if curl:
         poses.beat(sc, ch, curl, end, move=10, over=0, settle=0)   # the pose is complete when the body lands
@@ -491,8 +612,11 @@ def knockback(sc, ch, direction_xy, frame, distance_studs=8, height_studs=2, pos
 
 def fly(sc, ch, path_points_studs, f0, f1, height_studs=4):
     """Bake constant-speed flight: XY points use height_studs; XYZ points supply altitude."""
-    if f1 <= f0 or len(path_points_studs) < 2 or any(len(p) not in (2, 3) for p in path_points_studs):
-        raise ValueError('fly needs a positive interval and at least two XY/XYZ points')
+    if not isinstance(path_points_studs, (list, tuple)) or f1 <= f0 or len(path_points_studs) < 2 or any(
+            not isinstance(p, (list, tuple)) or len(p) not in (2, 3) or not _finite_coords(p, len(p)) for p in path_points_studs):
+        raise ValueError('fly needs a positive interval and at least two finite XY/XYZ points')
+    if not _finite_number(height_studs) or height_studs < 0:
+        raise ValueError('fly height must be a finite nonnegative number')
     points = [Vector((p[0], p[1], p[2] if len(p) == 3 else height_studs)) * S for p in path_points_studs]
     lengths = [(b - a).length for a, b in zip(points, points[1:])]
     if min(lengths) < 1e-8:
@@ -557,21 +681,28 @@ def _ground(ch, sc, frame):
     return p
 
 
-def story_beat(sc, b, ch, f, fps, cast, face_sched, fallen, settle, vfx_jobs, log):
+def story_beat(sc, b, ch, f, fps, cast, face_sched, fallen, settle, vfx_jobs, log, active_walk=None):
     """One story beat's fight keys -> fight/vfx calls. Effects that follow a body are queued in vfx_jobs (build.py bakes them
     after the cameras, on the final motion). Bad input is reported in log['errors'], never a crash."""
     import vfx
     global FACE
     FACE = lambda n, k, fr: face_sched[n].__setitem__(max(0, fr), k)
     who = b['who']
-    sec = lambda x: max(1, int(round(x * fps)))
+    def sec(x, what):
+        return max(1, _frames(x, fps, what))   # the caller owns the sign; huge or un-timable values raise inside _frames
     def err(m): log.setdefault('errors', []).append(f"t{b['t']} {who} {m}")
     def foe(name):
         if name not in cast or cast[name] is ch: err(f'fight target {name!r} not in cast'); return None
         return cast[name]
+    if 'fly' in b:   # a malformed fly rejects the WHOLE beat: no other effect of it may key or queue anything first
+        try:
+            _fly_preflight(b, ch, cast, fps)
+        except ValueError as e:
+            err(f'fly: {str(e)[:260]}')
+            return
     try:
         if b.get('power_up'):   # seconds: brace pose + aura
-            d = sec(b['power_up'] if isinstance(b['power_up'], (int, float)) else 1.5)
+            d = sec(1.0 if b['power_up'] is True else b['power_up'] if isinstance(b['power_up'], (int, float)) else 1.5, 'power_up s')   # true = 1 s as before (our fix on PR #2: the finite check rejects bools)
             poses.beat(sc, ch, MOVES['power_up'], f + 4, move=4, over=0, settle=0)
             col = b.get('aura_color', '#FFD23F')
             vfx_jobs.append(lambda: vfx.aura(sc, ch, f, f + d, col)); settle[who] = f + d
@@ -582,7 +713,7 @@ def story_beat(sc, b, ch, f, fps, cast, face_sched, fallen, settle, vfx_jobs, lo
             # on that exact frame), camera shake, then the aura stays (R165, creator idea 'Goku vs Vegeta with transformation').
             import rig as rig_   # aliased: a bare 'import rig' made rig LOCAL to story_beat and crashed every other beat
             tr = b['transform'] if isinstance(b['transform'], dict) else {'hair': str(b['transform'])}
-            d = sec(tr.get('s', 2.0)); fx = f + int(0.7 * d); col = tr.get('aura', '#FFE15A')
+            d = sec(tr.get('s', 2.0), 'transform s'); fx = f + int(0.7 * d); col = tr.get('aura', '#FFE15A')
             poses.beat(sc, ch, MOVES['power_up'], f + 4, move=4, over=0, settle=0)
             FACE(who, tr.get('face', 'scream'), f + 2); FACE(who, tr.get('face_after', 'smug'), fx + 6)
             old = [o for o in ch.hair_pivot.children_recursive if o.type == 'MESH']
@@ -602,27 +733,37 @@ def story_beat(sc, b, ch, f, fps, cast, face_sched, fallen, settle, vfx_jobs, lo
                     o.keyframe_insert('hide_render', frame=fr_); o.keyframe_insert('hide_viewport', frame=fr_)
             vfx_jobs.append(lambda: vfx.ground_power(sc, ch, f, fx + 4))
             sc.frame_set(fx); hp_ = ch.head_mesh.matrix_world.translation.copy()
-            vfx_jobs.append(lambda: vfx.aura(sc, ch, f + d // 3, fx + sec(tr.get('hold', 2.0)), col))
+            vfx_jobs.append(lambda: vfx.aura(sc, ch, f + d // 3, fx + sec(tr.get('hold', 2.0), 'transform hold'), col))
             vfx_jobs.append(lambda: vfx.impact_flash(sc, ch.head_mesh.matrix_world.translation.copy(), fx, '#FFFFFF'))
             log.setdefault('impact_frames', []).extend([fx, fx + 3])
             settle[who] = fx + 8
         if 'aura' in b:
             a = b['aura'] if isinstance(b['aura'], dict) else {'s': b['aura']}
-            d2 = sec(a.get('s', 2)); col2 = a.get('color', b.get('aura_color', '#FFD23F'))
+            d2 = sec(a.get('s', 2), 'aura s'); col2 = a.get('color', b.get('aura_color', '#FFD23F'))
             vfx_jobs.append(lambda: vfx.aura(sc, ch, f, f + d2, col2))
-        if 'fly' in b:   # {"to": [[x, y], ...] or a cast name, "height": studs, "s": seconds}
-            fl = b['fly']; d = sec(fl.get('s', 1.0)); sc.frame_set(f); p0 = ch.root.matrix_world.translation / S
-            to = fl.get('to')
+        if 'fly' in b:   # {"to": [x, y], [[x, y], ...] or a cast name, "height": studs, "s": seconds}
+            fl = b['fly']
+            if not isinstance(fl, dict): err('fly must be {"to": [x, y], [[x, y], ...] or a cast name}'); return
+            to = fl.get('to'); h = fl.get('height', 4); duration = fl.get('s', 1.0)
+            if not _finite_number(h) or h < 0: err(f'fly height must be a finite nonnegative number, not {h!r}'); return
+            if not _finite_number(duration) or duration <= 0: err(f'fly s must be a finite positive number, not {duration!r}'); return
+            d = sec(duration, 'fly s')
             if isinstance(to, str):
                 t_ = foe(to)
                 if t_ is None: return
+                sc.frame_set(f); p0 = ch.root.matrix_world.translation / S
                 q = t_.root.matrix_world.translation / S; v = (p0 - q).xy
                 v = v.normalized() if v.length > 1e-6 else Vector((0, 1))
                 pts = [(q.x + v.x * GUARD, q.y + v.y * GUARD)]
+            elif _finite_coords(to, 2):
+                pts = [to]
+            elif isinstance(to, (list, tuple)) and to and all(_finite_coords(p, 2) for p in to):
+                pts = to
             else:
-                pts = [tuple(p) for p in to]
-            h = fl.get('height', 4)
-            fly(sc, ch, [(p0.x, p0.y, max(p0.z, 0.0))] + [(p[0], p[1], h) for p in pts], f, f + d, height_studs=h)
+                err(f'fly to must be a finite [x, y] point, a list of finite [x, y] points, or a cast name, not {to!r}'); return
+            sc.frame_set(f); p0 = ch.root.matrix_world.translation / S
+            try: fly(sc, ch, [(p0.x, p0.y, max(p0.z, 0.0))] + [(p[0], p[1], h) for p in pts], f, f + d, height_studs=h)
+            except ValueError as e: err(f'fly: {str(e)[:260]}'); return
             settle[who] = f + d
         if 'down' in b:   # {"pose": "curl", "crater": true, "side": "R", "yaw": deg}: already lying curled from t on (scene continuity)
             dn = b['down'] if isinstance(b['down'], dict) else {'pose': 'curl'}
@@ -653,7 +794,7 @@ def story_beat(sc, b, ch, f, fps, cast, face_sched, fallen, settle, vfx_jobs, lo
                 mv_ = a['flurry']
                 if not (isinstance(mv_, list) and len(mv_) >= 2 and all(m_ in ('punch_R', 'punch_L', 'kick_R', 'uppercut_R', 'tap_R') for m_ in mv_)):
                     err('flurry must be a list of 2+ strikes (punch_R, punch_L, kick_R, uppercut_R, tap_R)'); return
-                n_ = len(mv_); tot = sec(a['s']) if isinstance(a.get('s'), (int, float)) and a['s'] > 0 else int(round(.3 * fps * (n_ - 1)))
+                n_ = len(mv_); tot = sec(a['s'], 'flurry s') if isinstance(a.get('s'), (int, float)) and a['s'] > 0 else int(round(.3 * fps * (n_ - 1)))
                 w_ = [1.4 - i / max(1, n_ - 2) * .8 for i in range(n_ - 1)] if n_ > 2 else [1.0]; gaps = [max(4, int(round(tot * x / sum(w_)))) for x in w_]
                 gaps = [g_ + (1 if g_ in (3, 8, 13) else 0) for g_ in gaps]   # a wind-up key must never land on the previous contact frame
                 fr_ = f; first_fr = f
@@ -672,7 +813,7 @@ def story_beat(sc, b, ch, f, fps, cast, face_sched, fallen, settle, vfx_jobs, lo
             rec = []
             blk = bool(a.get('blocked'))
             r = attack(sc, ch, tgt, a['move'], f, rec, blocked=blk, catch_hand=a.get('catch'), no_look=bool(a.get('no_look')),
-                       hold=sec(a['hold']) if isinstance(a.get('hold'), (int, float)) and a['hold'] > 0 and blk else 0)
+                       hold=sec(a['hold'], 'attack hold') if isinstance(a.get('hold'), (int, float)) and a['hold'] > 0 and blk else 0)
             log.setdefault('fight', []).append({'t': b['t'], 'who': who, 'move': a['move'], 'target': tgt.name,
                                                 'error_cm': round(rec[-1]['error_m'] * 100, 2), 'step_studs': round(rec[-1]['step_m'] / S, 2), **({'blocked': True} if blk else {})})
             quiet = blk or a['move'] == 'tap_R'   # stopped / tapped: a small flash, no impact frame (no camera shake)
@@ -743,7 +884,8 @@ def story_beat(sc, b, ch, f, fps, cast, face_sched, fallen, settle, vfx_jobs, lo
                 if new < dist: log.setdefault('notes', []).append(f"t{b['t']} {who} knockback {dist} -> {new:.1f} studs (set piece behind)")
                 dist = min(dist, new)
             pose_ = k.get('pose'); side_ = k.get('side', 'R')
-            end = knockback(sc, ch, (dv.x, dv.y), f, dist, k.get('height', 2), pose=pose_, side=side_)
+            end = knockback(sc, ch, (dv.x, dv.y), f, dist, k.get('height', 2), pose=pose_, side=side_,
+                            walk_end=active_walk[1] if active_walk else None)
             fallen[who] = -1; settle[who] = end + 6
             log.setdefault('fall_spans', []).append([who, f, 10 ** 9, 'forward' if pose_ == 'curl' else 'backward'])   # lying: build re-rests it on the floor after the head/arm passes (Dave's head 4 cm under)
             log.setdefault('impact_frames', []).append(end)
@@ -757,17 +899,44 @@ def story_beat(sc, b, ch, f, fps, cast, face_sched, fallen, settle, vfx_jobs, lo
                 vfx_jobs.append(lambda: vfx.dust_burst(sc, _ground(ch, sc, end), end))
         if 'beam' in b:   # {"to": name, "s": beam seconds, "charge": seconds before t, "color", "hand", "hands": "both",
             # "deflect": {"after": s, "to": [x, y, z] studs, "hand": "R"}}; beam fires AT t
-            bm = b['beam']; tgt = foe(bm.get('to'))
+            bm = b['beam']
+            if not isinstance(bm, dict): err('beam must be an object with a cast-name to'); return
+            target_name = bm.get('to')
+            if not isinstance(target_name, str): err('beam.to must be another character name'); return
+            tgt = foe(target_name)
             if tgt is None: return
-            both = bm.get('hands') == 'both'; hs = ('R', 'L') if both else (bm.get('hand', 'R'),)
-            hand = hs[0]; piv = ch.arm[hand]; f0 = f - sec(bm.get('charge', 0.6)); f1 = f + sec(bm.get('s', 1.0))
-            col4 = bm.get('color', '#49BFFF'); bsz = float(bm.get('size', 1.0)) if isinstance(bm.get('size', 1.0), (int, float)) and bm.get('size', 1.0) > 0 else 1.0
+            duration, charge = bm.get('s', 1.0), bm.get('charge', 0.6)
+            if not _finite_number(duration) or duration <= 0:
+                err(f'beam.s must be a finite positive number, not {duration!r}'); return
+            if not _finite_number(charge) or charge < 0:
+                err(f'beam.charge must be a finite nonnegative number, not {charge!r}'); return
+            bsz = bm.get('size', 1.0)
+            if not _finite_number(bsz) or bsz <= 0:
+                err(f'beam.size must be a finite positive number, not {bsz!r}'); return
+            hand = bm.get('hand', 'R')
+            hands = bm.get('hands')
+            if hands not in (None, 'both'):
+                err(f"beam.hands must be 'both' when supplied, not {hands!r}"); return
+            both = hands == 'both'
+            if not both and hand not in ('R', 'L'):
+                err(f'beam.hand must be R or L, not {hand!r}'); return
+            hs = ('R', 'L') if both else (hand,)
+            col4 = bm.get('color', '#49BFFF')
+            if not isinstance(col4, str) or re.fullmatch(r'#[0-9a-fA-F]{6}', col4) is None:
+                err(f'beam.color must be a #RRGGBB hex color, not {col4!r}'); return   # rig.lin refuses anything else
             dfl = bm.get('deflect')
-            if dfl is not None and not isinstance(dfl, dict): dfl = {}
-            if dfl is not None and 'to' in dfl and not (isinstance(dfl['to'], (list, tuple)) and len(dfl['to']) == 3):
-                err(f"beam deflect.to must be [x, y, z] studs, not {dfl['to']!r}"); return
-            fd = f + sec(dfl.get('after', 0.5)) if dfl is not None else None
-            if fd is not None and not f < fd < f1 - 2: err('beam deflect.after must fall inside the beam (0 < after < s - 0.1)'); return
+            if dfl is not None and not isinstance(dfl, dict): err('beam deflect must be an object'); return
+            if dfl is not None:
+                if 'to' in dfl and not _finite_coords(dfl['to'], 3):
+                    err(f"beam deflect.to must be three finite [x, y, z] studs, not {dfl['to']!r}"); return
+                if dfl.get('hand', 'R') not in ('R', 'L'):
+                    err(f"beam deflect.hand must be R or L, not {dfl.get('hand')!r}"); return
+                after = dfl.get('after', 0.5)
+                if not _finite_number(after) or after <= 0:
+                    err(f'beam deflect.after must be a finite positive number, not {after!r}'); return
+            f0 = f - sec(charge, 'beam charge'); f1 = f + sec(duration, 'beam s')
+            fd = f + sec(dfl.get('after', 0.5), 'beam deflect.after') if dfl is not None else None
+            if fd is not None and not f < fd < f1 - 2: err('beam deflect.after must fall inside the frame-quantized beam (after < s - 2 frames)'); return
             sc.frame_set(f0); p0 = ch.root.matrix_world.translation.copy(); q = tgt.torso.matrix_world.translation
             yaw_b = math.atan2(q.x - p0.x, -(q.y - p0.y))
             sole = min((l.matrix_world @ Vector(c)).z for l in ch.legs for c in l.bound_box)
@@ -800,6 +969,10 @@ def story_beat(sc, b, ch, f, fps, cast, face_sched, fallen, settle, vfx_jobs, lo
             if dfl is not None:
                 dh = dfl.get('hand', 'R'); dp = tgt.arm[dh] if dh in ('R', 'L') else None
                 if dp is None: err(f"beam deflect.hand must be R or L, not {dfl.get('hand')!r}"); return
+                other = 'L' if dh == 'R' else 'R'
+                # poses.beat keys BOTH arms + head + body (full()); a rejected destination must undo every key it authored.
+                dfl_objs = [dp, tgt.arm[other], tgt.head, tgt.upper]
+                dfl_pre = _key_table(dfl_objs)
                 for fr in (f - 6, f, fd):   # raise the palm at the attacker's hand, hold it, then flick it up and out
                     sc.frame_set(fr); bpy.context.view_layer.update()
                     sh = dp.matrix_world.translation; src_ = sum((ch.arm[h].matrix_world.translation for h in hs), Vector()) / len(hs)
@@ -808,8 +981,8 @@ def story_beat(sc, b, ch, f, fps, cast, face_sched, fallen, settle, vfx_jobs, lo
                                      tol=.2, label=f'{tgt.name} catch', rx_rng=(-200, 40), ry_rng=(-130, 130))
                 poses.beat(sc, tgt, {dh: (150, 55)}, fd + 4, move=3, over=0, settle=0)   # the flick: up and out
                 poses.beat(sc, tgt, {dh: (0, 3)}, f1 + 8, move=8, over=0, settle=0)
-                other = 'L' if dh == 'R' else 'R'
                 poses.beat(sc, tgt, {other: (0, 3)}, max(1, f - 6), move=4, over=0, settle=0)   # the other arm hangs relaxed
+                dfl_post = _key_table(dfl_objs)
                 hold['dp'] = dp; hold['dh'] = dh
                 settle[tgt.name] = max(settle.get(tgt.name, 0), f1 + 8)
             def big_extras(st_, en_):   # size > 1.5: blown dust and rocks along the path, cracks under the caster while he fires
@@ -817,6 +990,13 @@ def story_beat(sc, b, ch, f, fps, cast, face_sched, fallen, settle, vfx_jobs, lo
                 return vfx.beam_debris(sc, st_, en_, f, f1) + vfx.ground_power(sc, ch, f, f1)
             if bsz > 1.5: log.setdefault('impact_frames', []).extend(range(f, f1, 4))   # camera shake for the whole beam
             def _beam():
+                if dfl is not None and dfl.get('to') is not None:
+                    # The destination is judged on the FINAL keyed motion, before any effect object exists: too close = no beam.
+                    sc.frame_set(f + 2); bpy.context.view_layer.update()
+                    palm = hold['dp'].matrix_world @ tip(hold['dh'])
+                    if (Vector(dfl['to']) * S - palm).length < .5:
+                        _rollback_keys(dfl_pre, dfl_post)   # only the deflect's own palm/head/body keys go
+                        raise ValueError(f"deflect.to {list(dfl['to'])} is on the defender's palm (< 0.5 m): beam omitted")
                 out = vfx.charge_ball(sc, ch, 'both' if both else hand, f0, f, col4, max(1.0, bsz / 2))
                 sc.frame_set(f); bpy.context.view_layer.update(); st = sum((ch.arm[h].matrix_world @ tip(h) for h in hs), Vector()) / len(hs)
                 if dfl is None:
@@ -828,7 +1008,6 @@ def story_beat(sc, b, ch, f, fps, cast, face_sched, fallen, settle, vfx_jobs, lo
                 else:   # default: up into the sky, a little further along the beam
                     d_ = (palm - st); d_.z = 0; d_ = d_.normalized() if d_.length > 1e-6 else Vector((0, 1, 0))
                     goal = palm + d_ * 10 * S + Vector((0, 0, 60 * S))
-                if (goal - palm).length < .5: raise ValueError('deflect.to is on the defenders hand')
                 return (out + vfx.energy_beam(sc, st, palm, f, f1, col4, bsz) + big_extras(st, palm) + vfx.impact_flash(sc, palm, f + 2, '#E6FBFF')
                         + vfx.sparkles(sc, palm, f + 3, fd) + vfx.impact_flash(sc, palm, fd, '#FFFFFF')
                         + vfx.energy_beam(sc, palm, goal, fd, f1, col4, bsz * .45 if bsz > 1.5 else bsz, 'line')

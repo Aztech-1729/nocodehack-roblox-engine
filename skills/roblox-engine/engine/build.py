@@ -30,6 +30,26 @@ def F(t, fps):
     return int(round(float(t) * fps))
 
 
+def fight_walk_span(walk_spans, who, f):
+    """The walk that owns frame f for a fight beat — inclusive at BOTH ends: a knockback on the walk's FIRST frame still
+    interrupts it and clears the walk's keys through the walk's own end (was `span[0] < f`: the first frame was orphaned)."""
+    span = walk_spans.get(who)
+    return span if span and span[0] <= f <= span[1] else None
+
+
+def run_vfx_jobs(jobs, log):
+    """Deferred fight effects (queued by fight.story_beat, baked here after the cameras on the final motion). A failed job is
+    reported as an error and leaves NO objects behind: whatever it created before raising is removed whole."""
+    for job in jobs:
+        made = set(bpy.data.objects)
+        try:
+            for o in job(): o.name = 'VFX ' + o.name
+        except (ValueError, AssertionError, KeyError) as e:
+            for o in set(bpy.data.objects) - made:
+                bpy.data.objects.remove(o, do_unlink=True)
+            log.setdefault('errors', []).append(f'vfx: {str(e)[:80]}')
+
+
 def yaw_to(src_xy, dst_xy):
     dx, dy = dst_xy[0] - src_xy[0], dst_xy[1] - src_xy[1]
     return math.degrees(math.atan2(dx, -dy))
@@ -1125,6 +1145,7 @@ def build(spec, log):
         raise KeyError(f'unknown look/aim target {name}')
 
     settle = {}   # who -> frame their last walk/turn has settled (grabs wait for it)
+    walk_spans = {}   # who -> the last accepted walk's owned [start, end] frame interval
     lean_for = {}  # who -> forward lean (deg) the approach planned for the next grab
     seated, fallen, seat_back = {}, {}, {}
     vfx_jobs = []   # fight VFX closures, baked after the shots
@@ -1447,6 +1468,7 @@ def build(spec, log):
         lo.LEGACY_FALLBACK = False
         log.setdefault('walks', []).append({'who': who, 'f0': info['f_start'], 'f1': info['f_end'], 'slide_cm': round(100 * info.get('max_plant_drift', 0), 2),
                                             'run': bool(b.get('run') or b.get('speed', 9.5) >= 10), 'stride': 'n' in info and not info.get('segmented')})
+        walk_spans[who] = (info['f_start'], info['f_end'])
         # walking characters look where they go: head back to forward at the walk start, and AT the goal on arrival
         gaze.append((ch, '__forward__', f + 4, 4, False))
         goal = next((el for el in reversed(wl) if isinstance(el, str)), None)
@@ -2111,7 +2133,8 @@ def build(spec, log):
                     break
             else: log.setdefault('errors', []).append(f"t{b['t']} {b['who']} jump rejected: {hit}")
         if any(k in b for k in FIGHT_KEYS):
-            fight_beat(sc, b, ch, f, fps, cast, face_sched, fallen, settle, vfx_jobs, log)
+            active_walk = fight_walk_span(walk_spans, b['who'], f)
+            fight_beat(sc, b, ch, f, fps, cast, face_sched, fallen, settle, vfx_jobs, log, active_walk=active_walk)
         if 'shoot' in b:   # {"target": name | [x, y] studs, "shots": 1, "every": 0.25, "side": "R", "hit": true}: the gun appears in the hand,
             import guns, vfx   # the arm is up AT t, shots from t + 2 frames (guns.py by Kimi; sound_mix times 'gunshot' the same way)
             sp_ = b['shoot'] if isinstance(b['shoot'], dict) else {'target': b['shoot']}
@@ -2735,11 +2758,7 @@ def build(spec, log):
     # fight VFX: baked AFTER the cameras are chosen (auras/beams must not steer framing) and after all motion is final
     mk = sorted(sc.timeline_markers, key=lambda m: m.frame)
     cam_at = lambda fr: next((m.camera for m in reversed(mk) if m.frame <= fr), mk[0].camera if mk else None)
-    for job in vfx_jobs:
-        try:
-            for o in job(): o.name = 'VFX ' + o.name
-        except (ValueError, AssertionError, KeyError) as e:
-            log.setdefault('errors', []).append(f'vfx: {str(e)[:80]}')
+    run_vfx_jobs(vfx_jobs, log)
     for fr in log.get('impact_frames', []):   # every hit shakes the camera that shows it
         if cam_at(fr): ia.cam_shake(sc, cam_at(fr), fr, 0.06, seed=fr)
     # FACE ACCENTS ON THE CUTS (after the shots: it needs the final cut list): a close-up lands on a changed face, a blink / mouth
