@@ -3,37 +3,34 @@
 Every fix to the NoCodeHack Roblox Engine, newest first: what you saw, why it happened, what changed, and how it was tested.
 Found a problem? Open an issue or comment on the video, it lands here.
 
-## 1.12.1 · 2026-11-17 · Roblox Studio: close it after setup
+## 1.12.1 · 2026-11-17 · You can close Roblox Studio after setup
 
-**What you asked:** does Roblox Studio have to stay open after the MCP setup?
+A viewer asked on the video whether Roblox Studio has to stay open once the MCP is set up. It doesn't. Studio is only used
+the first time, to grab the hair, animations and sets. When Claude says setup is done, you can close it. Claude asks you to
+open it again only when it needs something new from Roblox.
 
-**Answer, now in the README and in Claude's rules:** no. Studio is only used for the one-time library fetch (hair,
-animations, sets). When `status` is complete, Claude tells you setup is done and that you can close Studio. Making Shorts
-never uses it; Claude asks you to reopen it only if an update adds new library items.
+We checked the code to be sure: only the setup step talks to Studio. Writing the story, building the scenes, rendering and
+the sound mix all run without it. The README and Claude's instructions now say this too.
 
-**Checked in the code:** only the fetch tools talk to Studio; story checks, builds, renders and the sound mix never do.
+## 1.12.0 · 2026-11-17 · Setup no longer stops on "no permission" animations
 
-## 1.12.0 · 2026-11-17 · Animations Roblox won't let your account load no longer block setup
+Thanks to a viewer who reported this on the video: some people saw "no permission" while Claude downloaded the animations,
+and setup never finished.
 
-**What you saw:** "no permission" when Claude downloaded the animations (thanks for reporting it on the video), and setup
-would not finish, because the rules said every animation had to be there before the first Short.
+**The cause:** 11 of the 24 animations come from another creator's pack on the Roblox Creator Store, and Roblox refuses a
+few of them on some accounts. Nothing was wrong with your setup, but the engine wanted every animation before it would make
+a Short.
 
-**Why:** some clips in the library belong to other Roblox creators. Roblox lets each account load only the animations it is
-allowed to, so on some accounts a few clips are refused. That is Roblox's permission, not a broken setup.
+**Now:** Claude tells you which animations Roblox refused, finishes setup anyway, and your stories use a close stand-in for
+those moves (an "agree" becomes a wave, a tantrum becomes a dance). Nothing stops.
 
-**What changed:**
-- `collect anims` now says `REFUSED <clip>` in plain words and moves on. `status` counts a few refused clips as done.
-- Every clip has a stand-in (for example `agree` -> `wave`, `haha` -> `laugh`). A story that asks for a refused clip plays
-  the stand-in, or no clip, and the build goes on; `story_lint` shows it as a warning instead of an error.
-- Claude tells you in one line which clips were refused and that nothing is broken.
+**Also new in this build:** characters can pull out a gun and shoot (muzzle flash, tracer, recoil, gunshot sound), stories
+can add blood and bruises, there is a pastel Miami-style street with palm trees, turns look more natural (the head moves
+first), punch combos no longer get an anime aura unless you ask for one, and Roblox yellow skin stays yellow in bright
+daylight.
 
-**Also in this build:** a `shoot` beat (pistol, muzzle flash, tracer, recoil, gunshot sound), optional `blood` and `bruises`,
-a pastel `vice` street set with palms, smoother turns (the head leads), no anime aura on punch combos unless a story asks,
-skin that keeps its Roblox yellow in bright scenes, and a side-on two-shot that keeps both faces.
-
-**Tested:** a fresh copy of this release with `agree` and `tantrum` removed: `status` reports anims 22/24 as fine, the story
-check shows two warnings instead of errors, and a store story that uses both clips builds with `wave` and `dance` in their place.
-New unit test `tests/test_anim_refused.py`; all 63 stories still pass the story check.
+**Tested:** we removed two animations from a fresh copy to act like a refused account. Setup counted it as complete, both
+moves played their stand-ins, and all 63 of our test stories still pass the story check.
 
 ## 1.11.1 · 2026-11-15 · Reliability fixes from a community audit (thanks @Aztech-1729)
 
