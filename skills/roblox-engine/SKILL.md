@@ -53,6 +53,8 @@ wants a model, hair, set or accessory that is missing, or `status` shows missing
    `imp_<id>`, `execute_luau` the code of `tools/rbx_set_export.luau`, then `tools/rbx_set_meshes.luau` with ID = "<id>" and
    FROM/TO = 1/40, 41/80, ... until nothing is left (DESTROY = true on the last call), then
    `python tools/rbx_set_import.py fetch <id> <slug>`. The story uses it as `"kind": "rbx:<slug>"`; it stays for later stories.
+   A creature: save how it moves once, from what it is: `python tools/rbx_set_import.py moves <slug> <type>` (biped,
+   quadruped, flyer, slither, crawler, floater; a slug that has none only follows its path).
    Draft one still and look at it; a model that looks wrong (broken meshes, wrong scale, not what was asked) is not used.
 4. Refused, nothing fits, or the user does not want to open Studio: fall back (a part-built creature, a stand-in animation,
    another hair or set) and say so in one line.
@@ -106,7 +108,9 @@ The camera cuts on actions: a story with few beats gets few shots. Before step 2
   the prop itself). Mix sizes: wide/full for blocking, medium for talk, close for the punchline face.
 - Something the engine has no model for (a dragon, a monster, a dog, a car, a spaceship...): get it into the Short, do not write
   around it first. Use the scene key `creatures` (short.schema.md): a model already on this PC (`rbx:<slug>` in assets/rbxsets),
-  else fetch one from the Roblox Creator Store (section 1b), else a part-built kind (`dragon` for any winged beast). Only when
+  else fetch one from the Roblox Creator Store (section 1b), else a part-built kind by how it moves: `ogre` (two legs, any
+  giant or monster), `wolf` (four legs, any dog or big cat), `dragon` (wings), `snake` (slithers or swims), `spider` (many legs,
+  any bug), `ghost` (floats). Only when
   all of that fails: say so in one line and write around it (hidden in a box that jolts with `shake`, heard not seen).
 - Entrances: start the character at the room edge or in a doorway (positions outside the room are pulled inside), then walk.
 - Faces: change `face` on every emotional turn; 4-6 different faces per character in a 30 s Short.

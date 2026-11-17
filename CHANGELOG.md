@@ -3,6 +3,30 @@
 Every fix to the NoCodeHack Roblox Engine, newest first: what you saw, why it happened, what changed, and how it was tested.
 Found a problem? Open an issue or comment on the video, it lands here.
 
+## 1.15.0 · 2026-11-17
+
+<img src="docs/img/changelog/1.15.0_creature_moves.jpg" width="800">
+
+### Added
+- Creatures move according to their type: two-legged, four-legged, flying, slithering or swimming, many-legged and floating.
+- Five new built-in creatures, one per type: an ogre, a wolf, a snake, a spider and a ghost. They join the dragon and need
+  no download.
+- Walking creatures keep their feet planted: a foot on the ground stays put while the body moves over it.
+- Heavy two-legged creatures shake the camera with every step. The wolf can sit and pounce.
+- A model imported from the Roblox Creator Store gets its movement type once, at import, and keeps it for every later story.
+  A one-piece model moves as a whole: it bobs with its steps, wiggles, banks into turns or floats.
+
+### Changed
+- The story check knows the movement types and warns when an imported creature has none saved.
+
+### Documentation
+- The story format lists every creature, its movement type and walking speeds that read well.
+
+### Testing
+- New automated test: each built-in creature walks 30 studs, and no foot on the ground slides or sinks (0.00 cm).
+- One test story per movement type renders cleanly. All 141 internal stories give the same story-check results as before.
+- The internal test suite now also runs the posting tool's tests, which were skipped before.
+
 ## 1.14.0 · 2026-11-17
 
 ### Fixed

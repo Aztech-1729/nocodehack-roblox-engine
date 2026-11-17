@@ -189,12 +189,27 @@ A dragon, a monster, a robot, a car: placed and filmed like a prop, by name (sho
 | key | default | meaning |
 |---|---|---|
 | `name` | required | name used by shots / looks |
-| `kind` | `dragon` | `dragon` = part-built blocky dragon (no Studio needed); `rbx:<slug>` = a Creator Store model fetched once into assets/rbxsets (SKILL 1b) |
+| `kind` | `dragon` | part-built (no Studio needed): `dragon`, `ogre`, `wolf`, `snake`, `spider`, `ghost`; or `rbx:<slug>` = a Creator Store model fetched once into assets/rbxsets (SKILL 1b) |
+| `moves` | the kind's own | movement type: `biped`, `quadruped`, `flyer`, `slither`, `crawler`, `floater` (table below). A Creator Store model gets it once at import (`python tools/rbx_set_import.py moves <slug> <type>`); set it here only to override |
+| `heavy` | true for `ogre` | biped: every footfall shakes the camera that shows it |
+| `sit` | none | `[from, to]` seconds: the wolf sits (rear down, head up) |
+| `pounce` | none | list of seconds: the wolf crouches and leaps 8 studs along its facing (about 0.75 s) |
 | `at`, `z`, `yaw`, `scale` | `[0,0]`, 0, 0, 1 | start position (studs), height, facing (deg, 0 = facing -y like characters), size factor |
 | `color`, `belly`, `wing` | green set | part-built colours |
 | `path` | none | `[{"t": s, "at": [x, y], "z": h}, ...]`: flies / walks between points, nose along the travel (landing = last point at z 0) |
 | `flap`, `hover` | none | `[from, to]` seconds: wing beats (part-built) / a slow bob |
 | `roar` | none | list of `[from, to]` seconds: jaw open + head up (part-built) |
+Movement types (`path` drives all of them; legs follow the distance walked, so feet on the ground do not slide):
+| moves | part-built kind | motion |
+|---|---|---|
+| `biped` | `ogre` | two legs in turn, arms swing; `heavy` = slow steps + camera shake |
+| `quadruped` | `wolf` | legs in diagonal pairs, tail wag; `sit`, `pounce` |
+| `flyer` | `dragon` | `flap`, `hover`, `roar`; the body tips nose-down when it descends |
+| `slither` | `snake` | a wave runs down the body (a slow creep when it stops); swimming moves the same way |
+| `crawler` | `spider` | eight legs in two alternating groups, swinging feet lift |
+| `floater` | `ghost` | bob, sway, lean into the travel, squash on arrival |
+A Creator Store model is one piece: it gets its type's whole-model motion (steps bob it, a slitherer wiggles, a flyer banks into turns, a floater bobs).
+Walking speeds that read well: ogre 4-6 studs/s, wolf 6-10, spider 5-9, snake 3-5, ghost 4-8. A long creature (wolf, snake, dragon) seen side-on needs a `wide` shot: a 9:16 `full` crops it.
 Example: `{"name": "Dragon", "kind": "dragon", "at": [0, 14], "path": [{"t": 0, "at": [0, 50], "z": 34}, {"t": 2.2, "at": [0, 14], "z": 0}], "flap": [0, 2.4], "hover": [2.4, 7], "roar": [[2.6, 3.6]]}`
 
 ## 6. beats

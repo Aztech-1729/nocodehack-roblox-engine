@@ -1093,7 +1093,7 @@ def build(spec, log):
     for c_ in spec.get('creatures', []):   # big creatures / custom models (creatures.py): placed and framed like props, by name
         import creatures
         try:
-            root_, subj_ = creatures.make(c_); creatures.animate(root_, c_, fps, log.setdefault('notes', [])); props[c_['name']] = subj_
+            root_, subj_ = creatures.make(c_); creatures.animate(root_, c_, fps, log, sc.frame_end); props[c_['name']] = subj_
         except (KeyError, ImportError, FileNotFoundError) as e: log.setdefault('errors', []).append(f"creature {c_.get('name')}: {e}")
     bpy.context.view_layer.update()
     # PROP SHAKE (story key props[].shake = [seconds]): the prop jolts ~0.5 s - something alive inside a box, a buzzing phone,

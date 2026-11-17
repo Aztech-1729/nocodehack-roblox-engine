@@ -3,6 +3,7 @@ Pipeline (see LIBRARY.md):
   1. insert the model in Studio (MCP insert_asset -> workspace.SetImport.imp_<id>), run tools/rbx_set_export.luau (parts -> Studio log lines
      'RBXSET|id|chunk|json') and tools/rbx_set_meshes.luau (per-mesh time windows 'RBXMESH|id|json').
   2. python tools/rbx_set_import.py fetch <id> [slug]   -> assets/rbxsets/<id>_<slug>/ scene.json + meshes/*.obj + textures/*.png
+     a creature model: python tools/rbx_set_import.py moves <slug> <biped|quadruped|flyer|slither|crawler|floater> -> creature.json
   3. build(dir, at, rot, scale) inside Blender (sets.rbx_set wraps it), or
      blender -b --factory-startup -P tools/rbx_set_import.py -- build <dir> out.blend
 Axes: Roblox (x right, y up, z back) -> Blender (x, -z, y); 1 stud = 0.5 m (S). Asserted by selftest(): a 4x1x2 block is 2 x 1 x 0.5 m... see _p.
@@ -522,6 +523,13 @@ if __name__ == '__main__':
     a = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else sys.argv[1:]
     if a[0] == 'selftest': print('selftest', selftest())
     elif a[0] == 'fetch': fetch(a[1], a[2] if len(a) > 2 else None)
+    elif a[0] == 'moves':   # the creature's movement type, chosen once at import (creatures.py reads it)
+        import ast
+        ok = ast.literal_eval(re.search(r"MOVES = (\(.*?\))", (E / 'creatures.py').read_text(encoding='utf-8')).group(1))
+        if a[2] not in ok: raise SystemExit(f"moves '{a[2]}' -> one of {', '.join(ok)}")
+        hit = sorted(d for d in OUT.iterdir() if (d / 'scene.json').exists() and (d.name.split('_', 1)[0] == a[1] or a[1].lower() in d.name.lower()))
+        if not hit: raise SystemExit(f'no imported model {a[1]!r} in {OUT}')
+        f = hit[0] / 'creature.json'; f.write_text(json.dumps({'moves': a[2]}), encoding='utf-8'); print('MOVES', f.parent.name, a[2])
     elif a[0] == 'build':
         import bpy
         selftest(); bpy.ops.wm.read_factory_settings(use_empty=True)

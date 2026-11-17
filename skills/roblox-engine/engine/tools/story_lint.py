@@ -20,7 +20,7 @@ SET = {'preset', 'size', 'height', 'wall', 'trim', 'floor', 'floor_color', 'door
 LOOKS = {'name', 'shirt', 'pants', 'skin', 'hair', 'hair_style', 'face', 'face_family', 'face_marks', 'outfit', 'accessories'}
 SCAST = LOOKS | {'at', 'yaw'}
 PROP = {'name', 'kind', 'on', 'at', 'z', 'rot', 'held_by', 'hand', 'until', 'shake'}
-CREATURE = {'name', 'kind', 'at', 'z', 'yaw', 'scale', 'color', 'belly', 'wing', 'path', 'flap', 'hover', 'roar'}
+CREATURE = {'name', 'kind', 'at', 'z', 'yaw', 'scale', 'color', 'belly', 'wing', 'path', 'flap', 'hover', 'roar', 'moves', 'sit', 'pounce', 'heavy'}
 BEAT = {'t', 'who', 'walk', 'speed', 'run', 'stride', 'hand', 'sit', 'stand', 'fall', 'get_up', 'give', 'throw', 'turn', 'pose', 'jump',
         'wiggle', 'wiggle_s', 'anim', 'loop', 'anim_speed', 'anim_skip', 'face', 'talk', 'gesture', 'look', 'track', 'grab', 'move',
         'attack', 'block', 'dodge', 'knockback', 'down', 'fly', 'land', 'power_up', 'aura', 'aura_color', 'beam', 'exclaim', 'transform',
@@ -120,6 +120,7 @@ class Lib:
         self.anims = {Path(p).parent.name for p in glob.glob(str(A / 'anims' / '*' / 'anim.json'))}
         self.anim_lib = _ast_dict_keys(E / 'anims.py', 'STAND_IN')
         self.creature_kinds = _ast_tuple(E / 'creatures.py', 'KINDS')
+        self.creature_moves = _ast_tuple(E / 'creatures.py', 'MOVES')
         self.hair = [Path(p).parent.name.lower() for p in glob.glob(str(A / 'hair' / '*_*' / 'mesh.obj'))]
         self.acc = {Path(p).parent.name.lower().split('_', 1)[1] for p in glob.glob(str(A / 'accessories' / '*_*' / 'mesh.obj'))}   # accessory tags (lib:sword1 props)
         self.outfits = []
@@ -562,6 +563,17 @@ def lint_scene(R, L, S, sc, si, looks, sdir, fps):
             if not any(k[4:].lower() in r for r in L.rbx):
                 R.err(w, 'kind', f"model '{k[4:]}' is not on this PC -> NEEDS STUDIO: fetch it from the Creator Store first (SKILL.md 'New assets'), or use a part-built kind ({', '.join(L.creature_kinds)})")
         elif k not in L.creature_kinds: R.err(w, 'kind', f"creature kind '{k}' -> {', '.join(L.creature_kinds)} or rbx:<slug> (a Creator Store model){near(k, L.creature_kinds)}")
+        mv = c.get('moves')
+        if mv is not None and mv not in L.creature_moves: R.err(w, 'moves', f"'{mv}' -> one of {', '.join(L.creature_moves)}{near(str(mv), L.creature_moves)}")
+        if mv is None and k.startswith('rbx:'):
+            hit = [r for r in L.rbx if k[4:].lower() in r]
+            if hit and not (A / 'rbxsets' / hit[0] / 'creature.json').exists():
+                R.warn(w, 'moves', f"no movement type saved for '{k[4:]}': it only follows its path -> python tools/rbx_set_import.py moves {k[4:]} <{'|'.join(L.creature_moves)}> (or set \"moves\" here)")
+        if (c.get('sit') or c.get('pounce')) and k != 'wolf' and mv != 'quadruped':
+            R.warn(w, 'sit', 'sit / pounce need a quadruped with legs (the part-built wolf): ignored')
+        if c.get('sit') is not None and not (isinstance(c['sit'], list) and len(c['sit']) == 2 and all(num(x) for x in c['sit']) and c['sit'][0] < c['sit'][1]):
+            R.err(w, 'sit', '-> [from, to] seconds')
+        if c.get('pounce') is not None and not (isinstance(c['pounce'], list) and all(num(x) for x in c['pounce'])): R.err(w, 'pounce', '-> [seconds, ...]')
         for j, p in enumerate(c.get('path') or []):
             if not (isinstance(p, dict) and num(p.get('t')) and is_xy(p.get('at'))): R.err(w, 'path', f'path[{j}] -> {{"t": seconds, "at": [x, y], "z": height}}')
     def prop_xy(n):
