@@ -184,6 +184,19 @@ Story rules (story.py):
 - Any Kenney model: `kit/name` (e.g. `food-kit/cookie`, `food-kit/pizza-box`) or a bare stem (`laptop`). Props are holdable copies, not obstacles, and are scaled to at most 0.8 m.
 - Kit names with scale factors (assets.py KIT_SCALE): furniture-kit, building-kit, car-kit, city-kit-suburban, city-kit-commercial, city-kit-roads, nature-kit, retro-urban-kit, mini-shop, food-kit.
 
+### 5b. creatures (scene key: big creatures and custom models - creatures.py)
+A dragon, a monster, a robot, a car: placed and filmed like a prop, by name (shots `on`, `look`, `turn`, walks away from it).
+| key | default | meaning |
+|---|---|---|
+| `name` | required | name used by shots / looks |
+| `kind` | `dragon` | `dragon` = part-built blocky dragon (no Studio needed); `rbx:<slug>` = a Creator Store model fetched once into assets/rbxsets (SKILL 1b) |
+| `at`, `z`, `yaw`, `scale` | `[0,0]`, 0, 0, 1 | start position (studs), height, facing (deg, 0 = facing -y like characters), size factor |
+| `color`, `belly`, `wing` | green set | part-built colours |
+| `path` | none | `[{"t": s, "at": [x, y], "z": h}, ...]`: flies / walks between points, nose along the travel (landing = last point at z 0) |
+| `flap`, `hover` | none | `[from, to]` seconds: wing beats (part-built) / a slow bob |
+| `roar` | none | list of `[from, to]` seconds: jaw open + head up (part-built) |
+Example: `{"name": "Dragon", "kind": "dragon", "at": [0, 14], "path": [{"t": 0, "at": [0, 50], "z": 34}, {"t": 2.2, "at": [0, 14], "z": 0}], "flap": [0, 2.4], "hover": [2.4, 7], "roar": [[2.6, 3.6]]}`
+
 ## 6. beats
 
 Each beat: `t` (seconds, required), `who` (cast name, required). Beats run in time order. Within one beat the keys run in this order: `walk`, `sit`, `stand`, `fall`/`get_up`, `give`, `throw`, `turn`, `pose`, `jump`, `wiggle`, `face`, `talk`, `look`, `grab`.

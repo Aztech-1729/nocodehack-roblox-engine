@@ -3,6 +3,33 @@
 Every fix to the NoCodeHack Roblox Engine, newest first: what you saw, why it happened, what changed, and how it was tested.
 Found a problem? Open an issue or comment on the video, it lands here.
 
+## 1.13.0 · 2026-11-17
+
+### Added
+- Creatures and custom models in stories: a scene can include a dragon, a monster or any other model. It is placed and
+  filmed by name, so characters can look at it, react to it and run from it, and the camera frames the whole creature.
+- A built-in blocky dragon that flies in, flaps its wings, lands, hovers and roars. No download needed.
+- Models from the Roblox Creator Store: when a story needs something the library does not have, Claude searches the
+  Creator Store through Roblox Studio, imports a fitting free model once and keeps it for later stories.
+- Example story: a dragon lands in a park and the kids run.
+
+### Changed
+- Claude asks to reopen Roblox Studio whenever it needs new assets (a model, a missing hair, new items after an update),
+  waits until it is open, and says when it can be closed again. If Studio is not available, it uses a built-in option and
+  says so.
+- A story that calls for an animal or a creature now shows it on screen instead of writing around it.
+- Shots of a creature size the frame to the whole creature instead of to a person.
+
+### Documentation
+- The README and setup instructions explain when Roblox Studio is needed.
+
+### Testing
+- The dragon example was built and checked frame by frame. A Roblox model already on disk was placed and moved as a
+  creature. A story that asks for a model missing from the PC is flagged before the build. All 63 internal test stories
+  pass the story check.
+
+Thanks to the viewers who asked about dragons and about keeping Studio open.
+
 ## 1.12.1 · 2026-11-17
 
 ### Fixed

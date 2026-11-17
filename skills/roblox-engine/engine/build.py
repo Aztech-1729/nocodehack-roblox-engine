@@ -1070,6 +1070,11 @@ def build(spec, log):
         except KeyError:   # unknown model name (factory p7 'cylinder'): a box stands in, the story still builds
             log.setdefault('notes', []).append(f"prop {p['name']}: unknown kind '{p.get('kind')}' -> box")
             props[p['name']] = sets.prop('box', p['name'], at, p.get('rot', 0))
+    for c_ in spec.get('creatures', []):   # big creatures / custom models (creatures.py): placed and framed like props, by name
+        import creatures
+        try:
+            root_, subj_ = creatures.make(c_); creatures.animate(root_, c_, fps, log.setdefault('notes', [])); props[c_['name']] = subj_
+        except (KeyError, ImportError, FileNotFoundError) as e: log.setdefault('errors', []).append(f"creature {c_.get('name')}: {e}")
     bpy.context.view_layer.update()
     # PROP SHAKE (story key props[].shake = [seconds]): the prop jolts ~0.5 s - something alive inside a box, a buzzing phone,
     # a rattling cupboard (the engine has no animal models: a hidden pet reads through its box; critics R 20261115-1240).

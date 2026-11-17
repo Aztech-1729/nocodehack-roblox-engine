@@ -99,7 +99,7 @@ use the nocodehack skill to make a Short about a kid who tries to hide a bad gra
 On the first run Claude:
 1. copies the engine into `./nocodehack-engine/` and checks your machine (Blender, ffmpeg, Python);
 2. downloads the Roblox faces and clothes from Roblox (about 5 minutes, automatic);
-3. asks you to open **Roblox Studio** (any place, Edit mode) with the Studio MCP connected, then grabs the hair, animations and sets from it (about 20 minutes, once). Nothing is saved or published. Studio is what gives the engine real Roblox assets in minutes instead of building them by hand, so this step is required. **After this one-time fetch you can close Studio**: making Shorts never uses it. Claude only asks you to open it again if an engine update adds new library items.
+3. asks you to open **Roblox Studio** (any place, Edit mode) with the Studio MCP connected, then grabs the hair, animations and sets from it (about 20 minutes, once). Nothing is saved or published. Studio is what gives the engine real Roblox assets in minutes instead of building them by hand, so this step is required. **After this fetch you can close Studio.** Claude asks you to reopen it whenever it needs new assets from Roblox.
 
 Then it writes the story, runs the checks, shows you a draft, and renders the quality you pick.
 
@@ -146,7 +146,7 @@ Claude always shows you exactly what it will send and waits for your yes. Posts 
 
 **Why do I need Roblox Studio?** The hair, clothes, faces, animations and sets belong to Roblox and their creators, so the repo ships only their ids. Your own Roblox Studio downloads the real assets on your PC on the first run, in about 20 minutes. Building them by hand would take days.
 
-**Does Roblox Studio have to stay open?** No. Studio is only needed for the one-time fetch of the Roblox libraries. When Claude says setup is done, close it: making Shorts never uses Studio. Claude asks you to open it again only if an engine update adds new library items.
+**Does Roblox Studio have to stay open?** No. Close it when Claude says setup is done. Claude asks you to open it again whenever it needs something new from Roblox (a dragon or a car a story asks for, a missing hair, new items after an update) and tells you when you can close it again.
 
 **Can I change the engine?** Yes. Ask Claude to teach it a new move, effect or camera rule. That is engine code, so it uses more of your Claude plan than making a Short.
 

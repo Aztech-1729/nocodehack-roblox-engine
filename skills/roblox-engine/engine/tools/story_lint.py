@@ -13,13 +13,14 @@ A = E / 'assets'
 # ---------------------------------------------------------------- keys the engine reads (build.py, fight.py, camera.py, story.py, tools/sound_mix.py)
 TOP = {'title', 'fps', 'mood', 'cast', 'scenes', 'seed', 'camera', 'look', 'set', 'auto_acting', 'strict_crowd', 'frame',
        'format', 'header', 'captions', 'narrator', 'voices', 'cards', 'split', 'hud', 'blood', 'bruises'}   # frame: B1 [w, h]
-SCENE = {'set', 'seconds', 'cast', 'props', 'beats', 'shots', 'look', 'breathe', 'fps', 'camera', 'establish', 'inserts', 'reactions',
+SCENE = {'set', 'seconds', 'cast', 'props', 'creatures', 'beats', 'shots', 'look', 'breathe', 'fps', 'camera', 'establish', 'inserts', 'reactions',
          'pitch', 'ecu', 'auto_acting', 'auto_faces', 'strict_crowd', 'music', 'title', 'crowd', 'blood', 'bruises'}
 SET = {'preset', 'size', 'height', 'wall', 'trim', 'floor', 'floor_color', 'door', 'wall_low', 'wainscot', 'windows', 'doors', 'decor',
        'ceiling_lamps', 'seed', 'time', 'mood', 'outdoor', 'park', 'dress', 'rbx', 'at', 'rot', 'scale', 'ground', 'board', 'notes', 'desks'}
 LOOKS = {'name', 'shirt', 'pants', 'skin', 'hair', 'hair_style', 'face', 'face_family', 'face_marks', 'outfit', 'accessories'}
 SCAST = LOOKS | {'at', 'yaw'}
 PROP = {'name', 'kind', 'on', 'at', 'z', 'rot', 'held_by', 'hand', 'until', 'shake'}
+CREATURE = {'name', 'kind', 'at', 'z', 'yaw', 'scale', 'color', 'belly', 'wing', 'path', 'flap', 'hover', 'roar'}
 BEAT = {'t', 'who', 'walk', 'speed', 'run', 'stride', 'hand', 'sit', 'stand', 'fall', 'get_up', 'give', 'throw', 'turn', 'pose', 'jump',
         'wiggle', 'wiggle_s', 'anim', 'loop', 'anim_speed', 'anim_skip', 'face', 'talk', 'gesture', 'look', 'track', 'grab', 'move',
         'attack', 'block', 'dodge', 'knockback', 'down', 'fly', 'land', 'power_up', 'aura', 'aura_color', 'beam', 'exclaim', 'transform',
@@ -116,6 +117,7 @@ class Lib:
         self.attacks = set(re.findall(r"'(\w+)'", m.group(1))) if m else {'punch_R', 'punch_L', 'kick_R', 'uppercut_R', 'tap_R'}
         self.anims = {Path(p).parent.name for p in glob.glob(str(A / 'anims' / '*' / 'anim.json'))}
         self.anim_lib = _ast_dict_keys(E / 'anims.py', 'STAND_IN')
+        self.creature_kinds = _ast_tuple(E / 'creatures.py', 'KINDS')
         self.hair = [Path(p).parent.name.lower() for p in glob.glob(str(A / 'hair' / '*_*' / 'mesh.obj'))]
         self.acc = {Path(p).parent.name.lower().split('_', 1)[1] for p in glob.glob(str(A / 'accessories' / '*_*' / 'mesh.obj'))}   # accessory tags (lib:sword1 props)
         self.outfits = []
@@ -518,6 +520,17 @@ def lint_scene(R, L, S, sc, si, looks, sdir, fps):
             R.err(w, 'kind', f"prop kind '{k}' is not built-in ({', '.join(sorted(PROP_BUILTIN))}) and not a Kenney model (assets/kenney/catalog.md)")
         if p.get('held_by') and p['held_by'] not in cast: R.err(w, 'held_by', f"'{p['held_by']}' is not in this scene's cast{near(p['held_by'], cast)}")
         if p.get('on') and not piece_ok(p['on']): R.warn(w, 'on', f"'{p['on']}' is not a known set piece of '{preset}' -> an exact name from short.schema.md 'Preset pieces' or a dress name")
+    for i, c in enumerate(sc.get('creatures', []) or []):   # creatures.py: big creatures / custom models, referenced like props
+        w = f'{W} creature[{i}]'
+        if not isinstance(c, dict) or 'name' not in c: R.err(w, 'name', 'every creature needs a "name"'); continue
+        unknown(R, w, c, CREATURE, 'creature'); props[c['name']] = {**c, 'kind': 'creature'}
+        k = str(c.get('kind', 'dragon'))
+        if k.startswith('rbx:'):
+            if not any(k[4:].lower() in r for r in L.rbx):
+                R.err(w, 'kind', f"model '{k[4:]}' is not on this PC -> NEEDS STUDIO: fetch it from the Creator Store first (SKILL.md 'New assets'), or use a part-built kind ({', '.join(L.creature_kinds)})")
+        elif k not in L.creature_kinds: R.err(w, 'kind', f"creature kind '{k}' -> {', '.join(L.creature_kinds)} or rbx:<slug> (a Creator Store model){near(k, L.creature_kinds)}")
+        for j, p in enumerate(c.get('path') or []):
+            if not (isinstance(p, dict) and num(p.get('t')) and is_xy(p.get('at'))): R.err(w, 'path', f'path[{j}] -> {{"t": seconds, "at": [x, y], "z": height}}')
     def prop_xy(n):
         p = props.get(n)
         if not p: return None

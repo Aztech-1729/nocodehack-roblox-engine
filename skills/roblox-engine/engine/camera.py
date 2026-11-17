@@ -1031,6 +1031,15 @@ def _shot(sc, name, f0, f1, kind='medium', subjects=(), side=0.0, lens=50, push=
         if ms_:
             pp_ = [o.matrix_world @ Vector(c_) for o in ms_ for c_ in o.bound_box]
             H0 = max(H0, 2.2 * max(max(q[i_] for q in pp_) - min(q[i_] for q in pp_) for i_ in range(3)))
+    cr_ = next((bpy.data.objects.get(s_.get('creature_root')) for s_ in subjects if not hasattr(s_, 'head_mesh') and s_.get('creature_root')), None)
+    if cr_ is not None:   # a CREATURE (creatures.py): the frame fits the whole beast (a 4 m dragon filmed at human size = a wall of belly)
+        sc.frame_set((f0 + f1) // 2)
+        pp_ = [o.matrix_world @ Vector(c_) for o in cr_.children_recursive if o.type == 'MESH' for c_ in o.bound_box]
+        if pp_:
+            ext_ = [max(q[i_] for q in pp_) - min(q[i_] for q in pp_) for i_ in range(3)]
+            H0 = max(H0, {'wide': 1.7, 'full': 1.3, 'medium': 0.9}.get(kind, 0.7) * max(ext_[2], 0.6 * max(ext_[:2])))
+            aim_z = (min(q.z for q in pp_) + 0.5 * ext_[2]) / S   # aim at the body's middle, not at a person's chest height
+        sc.frame_set(f0)
     if holder is not None: H0 = 1.4   # a prop IN A HAND: hand + prop + a bit of body (0.9 m lost a moving hand-over off the frame edge and read as a grey sleeve)
     top_fit = body_points(sc, [s_ for s_ in subjects if hasattr(s_, 'head_mesh')], f1) if frame == 'auto' else None   # cam2 landing shot: the frame is fitted to the whole lying body (bodies) + crater
     if frame and frame != 'auto': H0 = float(frame)   # shot key 'frame': frame HEIGHT in metres (e.g. a top-down that must show a whole lying body + its crater)
