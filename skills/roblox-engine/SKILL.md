@@ -48,7 +48,8 @@ wants a model, hair, set or accessory that is missing, or `status` shows missing
    tell me when it's open. I need to grab <what> (~<N> min). You can close it again after."
 3. Fetch. Library items: `python tools/fetch_library.py jobs`, then every step of `library/jobs/JOBS.md`. A new model: MCP
    `search_asset` for it (free models), pick ONE model that fits (blocky Roblox look, a single creature or object, not a whole
-   map, no scripts needed, a size you can scale), create the Folder `workspace.SetImport` if missing, `insert_asset` it there as
+   map, no scripts needed, a size you can scale; after inserting, count its MeshParts / SpecialMeshes / UnionOperations with
+   `execute_luau`: unions import as plain boxes, so skip a model made mostly of unions, and skip Accessories), create the Folder `workspace.SetImport` if missing, `insert_asset` it there as
    `imp_<id>`, `execute_luau` the code of `tools/rbx_set_export.luau`, then `tools/rbx_set_meshes.luau` with ID = "<id>" and
    FROM/TO = 1/40, 41/80, ... until nothing is left (DESTROY = true on the last call), then
    `python tools/rbx_set_import.py fetch <id> <slug>`. The story uses it as `"kind": "rbx:<slug>"`; it stays for later stories.

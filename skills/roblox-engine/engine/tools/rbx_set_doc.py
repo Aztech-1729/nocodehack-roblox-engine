@@ -49,7 +49,7 @@ def worker(directory):
 def draw(data, path):
     from PIL import Image, ImageDraw, ImageFont
     def _font(sz, bold=False):   # a real mono font when the OS has one, PIL's built-in otherwise
-        for f in (('C:/Windows/Fonts/consolab.ttf', 'C:/Windows/Fonts/consola.ttf') if bold else ('C:/Windows/Fonts/consola.ttf',),
+        for f in (*(('C:/Windows/Fonts/consolab.ttf', 'C:/Windows/Fonts/consola.ttf') if bold else ('C:/Windows/Fonts/consola.ttf',)),
                   '/System/Library/Fonts/Menlo.ttc', '/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf' if bold else '/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf'):
             if os.path.exists(f): return ImageFont.truetype(f, sz)
         try: return ImageFont.load_default(sz)

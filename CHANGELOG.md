@@ -3,6 +3,27 @@
 Every fix to the NoCodeHack Roblox Engine, newest first: what you saw, why it happened, what changed, and how it was tested.
 Found a problem? Open an issue or comment on the video, it lands here.
 
+## 1.14.0 · 2026-11-17
+
+### Fixed
+- A malformed flight in a fight is rejected as a whole, so it can no longer leave a power-up or aura half-animated.
+- Fight effects have a time limit: extreme or invalid durations are rejected with a clear message instead of freezing a build.
+- A character knocked back while walking no longer straightens up mid-fall when the walk would have continued.
+- Seated or lying characters can be hit without losing their sitting or lying animation.
+- A rejected beam deflection no longer leaves its charge ball behind, and a failed effect removes everything it created.
+- Importing a Roblox model no longer fails on its final documentation step.
+
+### Changed
+- Beam settings (size, hand, colour, deflection) are checked up front instead of silently falling back.
+- The story check now applies the same fight limits as the engine, including a scene's own frame rate.
+
+### Testing
+- The contributor's new fight test suite passes on Blender 5.2 (52 checks). On 13 fight and benchmark stories, every check
+  and every reported problem is identical with and without the change, and a rendered fight scene is pixel-identical frame
+  for frame. All 141 internal stories give the same story-check results.
+
+Thanks to @Aztech-1729 for a second careful audit of the fight engine ([PR #2](https://github.com/nocodehack/nocodehack-roblox-engine/pull/2)).
+
 ## 1.13.0 · 2026-11-17
 
 ### Added
