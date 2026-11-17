@@ -63,7 +63,21 @@ def _unwrap(v, prev):
 
 
 def meta(slug): return json.loads((ROOT / slug / 'meta.json').read_text())
-def slugs(): return sorted(p.name for p in ROOT.iterdir() if (p / 'anim.json').exists())
+def slugs(): return sorted(p.name for p in ROOT.iterdir() if (p / 'anim.json').exists()) if ROOT.exists() else []
+
+
+# Every library clip -> a similar one. Roblox can refuse a clip on a user's account ("no permission", fetch_library REFUSED):
+# the story then plays the stand-in, or no clip (None) - never a stopped build. Keys = every slug of assets/anims/LIBRARY.md.
+STAND_IN = {'agree': 'wave', 'applaud': 'cheer', 'cheer': 'applaud', 'climb': None, 'cower': None, 'curtsy': 'wave', 'dance': 'dance2',
+            'dance2': 'dance', 'dance3': 'dance', 'disagree': 'point', 'fall': None, 'haha': 'laugh', 'hello': 'wave', 'idle': None,
+            'jump': None, 'laugh': 'haha', 'point': 'wave', 'salute': 'wave', 'shrug': None, 'shy': None, 'tantrum': 'dance',
+            'toolnone': 'point', 'walk': None, 'wave': 'hello'}
+
+
+def resolve(slug):
+    """slug when it is on this PC, else its stand-in when that one is, else None (play no clip)."""
+    have = slugs()
+    return slug if slug in have else STAND_IN.get(slug) if STAND_IN.get(slug) in have else None
 
 
 def convert(slug):

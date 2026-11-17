@@ -36,7 +36,7 @@ def main():
     looks = {c['name']: c for c in story['cast']}
     jobs = int(sys.argv[sys.argv.index('--jobs') + 1]) if '--jobs' in sys.argv else 3   # scenes build in parallel (24 cores)
     rng = frames_arg(sys.argv)
-    inherited = {key: story[key] for key in ('look', 'set') if key in story}
+    inherited = {key: story[key] for key in ('look', 'set', 'blood', 'bruises') if key in story}
     scenes = look.contrast_moods([{**inherited, **scene} for scene in story['scenes']])
     seed = story.get('seed', zlib.crc32(story['title'].encode('utf-8')))
     work = []

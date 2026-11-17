@@ -10,7 +10,7 @@ from mathutils import Vector, Euler, Matrix, Quaternion
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 import claude_still as cs, interact as ia, lookat as la, grab as gr, locomotion as lo
-import rig, faces, poses, sets, look, camera, assets, space, staging, affordances
+import rig, faces, poses, sets, look, camera, assets, space, staging, affordances, accessories
 import fight
 from fight import FIGHT_KEYS, story_beat as fight_beat
 import run as runm, release
@@ -286,7 +286,7 @@ def hold_in_hand(piv, side, pr):
     down = (piv.matrix_world.to_3x3() @ Vector((0, 0, -1))).normalized()          # along the arm toward the hand
     c_, r_, top_ = prop_cyl(pr); base_z = pr.matrix_world.translation.z; half = max(r_, (top_ - base_z) / 2)
     ctr = tip   # R94 placement (forward/past-the-hand offsets regressed handoffs; revisit with handoff tests)
-    pr.location = (ctr.x, ctr.y, ctr.z - (top_ - base_z) / 2)
+    pr.location = (ctr.x, ctr.y, ctr.z - pr.get('grip_z', (top_ - base_z) / 2))   # a Roblox tool: its Grip in the hand
 
 
 def give_stops(world, ch, start, target, frame, st, speed, fps):
@@ -959,6 +959,7 @@ def build(spec, log):
         if tally[best_] >= 2 and sorted(tally.values())[-2] < tally[best_]:
             look_key += ':' + best_; log.setdefault('notes', []).append(f"auto mood {best_} {tally}")
     look.apply(sc, look_key, st.get('info'))
+    fight.STYLE = {'blood': bool(spec.get('blood')), 'bruises': bool(spec.get('bruises'))}   # fight marks (story/scene keys)
     for c in spec['cast']:   # unknown cast face / hair style: fall back instead of crashing
         if c.get('face', 'smile') not in faces.KINDS: log.setdefault('errors', []).append(f"{c['name']} unknown face '{c['face']}'"); c['face'] = 'smile'
         if c.get('face_family') not in (None, *__import__('acting').FAMILIES): log.setdefault('errors', []).append(f"{c['name']} unknown face_family '{c['face_family']}'")
@@ -989,6 +990,10 @@ def build(spec, log):
             if hit_ and ob_.parent is not None and ob_.parent in (ch_.hair_pivot,) or (hit_ and ob_.name.startswith('hair lib') and ob_ in ch_.hair_pivot.children_recursive):
                 hid_.append(side_)
         if hid_: log.setdefault('notes', []).append(f"CASTING {ch_.name}: hair covers the {'/'.join(hid_)} eye(s) from the front - pick an open-face hair (assets/hair/sheet.jpg)")
+    # ACCESSORIES (L1 acc): cast "accessories": ["lib:<tag>"], beats wear/remove -> welded at Roblox attachments
+    for c in spec['cast']:
+        if c.get('accessories') or any(b.get('who') == c['name'] and (b.get('wear') or b.get('remove')) for b in spec.get('beats', [])):
+            accessories.dress(cast[c['name']], c, spec.get('beats', []), fps, n, log)
     placed_ = []; START_GAP = 3.5   # studs between two characters' start spots (centre to centre)
     pocket_ = None
     w0 = space.World(sc, cast)   # START SPOTS: exact 3D vs the set and the other characters, with room to TURN (the 2D
@@ -1061,7 +1066,7 @@ def build(spec, log):
             at = ((x0 + x1) / 2 + p.get('at', [0, 0])[0] * S, (y0 + y1) / 2 + p.get('at', [0, 0])[1] * S, top)
         else:
             a = p.get('at', [0, 0]); at = (a[0] * S, a[1] * S, p.get('z', 0) * S)
-        try: props[p['name']] = sets.prop(p.get('kind', 'box'), p['name'], at, p.get('rot', 0))
+        try: props[p['name']] = (accessories.prop if str(p.get('kind')).startswith('lib:') else sets.prop)(p.get('kind', 'box'), p['name'], at, p.get('rot', 0))
         except KeyError:   # unknown model name (factory p7 'cylinder'): a box stands in, the story still builds
             log.setdefault('notes', []).append(f"prop {p['name']}: unknown kind '{p.get('kind')}' -> box")
             props[p['name']] = sets.prop('box', p['name'], at, p.get('rot', 0))
@@ -1102,7 +1107,7 @@ def build(spec, log):
             poses.beat(sc, ch, 'carry_' + hand, 0, move=1)
             sc.frame_set(0); bpy.context.view_layer.update()
             tip = ch.arm[hand].matrix_world @ gr._hand_local(rig.SIDE[hand], None)
-            c, rad, top = prop_cyl(pr); pr.location = (tip.x, tip.y, tip.z - (top - pr.matrix_world.translation.z) / 2)
+            c, rad, top = prop_cyl(pr); pr.location = (tip.x, tip.y, tip.z - pr.get('grip_z', (top - pr.matrix_world.translation.z) / 2))
             fu = F(p['until'], fps) if 'until' in p else n - 1
             held.append((ch.arm[hand], rig.SIDE[hand], pr, 0, END if fu >= n - 1 - F(0.5, fps) else fu))
             HELD_PROPS.add(pr.name)
@@ -1495,7 +1500,8 @@ def build(spec, log):
         return f0_
 
     # ---------------- THE ARM RULE: one function for the final gate AND the arm planners (give, face-touch poses) ----------------
-    hair = {c_.name: [o for o in c_.hair_pivot.children_recursive if o.type == 'MESH'] for c_ in cast.values()}
+    hair = {c_.name: [o for o in c_.hair_pivot.children_recursive if o.type == 'MESH'] + [a.obj for a in getattr(c_, 'acc', []) if a.part != 'head']
+            for c_ in cast.values()}   # body accessories (backpack, cape) join the own-hair allowance: arms keep out of them too
     prop_meshes = [o for p in props.values() for o in p.children_recursive if o.type == 'MESH']
     desks = st['desk_tops']
     def near_set(ch, frames):   # every solid set piece within 2.5 m of the character's path over these frames
@@ -2026,6 +2032,7 @@ def build(spec, log):
                 dur = 6 * max(1, math.ceil(abs(math.degrees((yaw - r.rotation_euler.z + math.pi) % (2 * math.pi) - math.pi)) / 35 - 1e-9))
                 f0_ = max(f - dur, settle.get(b['who'], 0))
                 fe_t = safe_turn(ch, f0_, yaw, 'turn')
+                if isinstance(tgt, str) and dur >= 12: gaze.append((ch, tgt, f0_ + 3, 5, False))   # the HEAD leads a big turn (eyes first, then the body: robotic turn fix 2026-11-15)
                 if fe_t > f + 2: n = retime_after(b, fe_t - f, 'turn')
                 settle[b['who']] = fe_t
         if 'jump' in b:
@@ -2100,11 +2107,38 @@ def build(spec, log):
             else: log.setdefault('errors', []).append(f"t{b['t']} {b['who']} jump rejected: {hit}")
         if any(k in b for k in FIGHT_KEYS):
             fight_beat(sc, b, ch, f, fps, cast, face_sched, fallen, settle, vfx_jobs, log)
+        if 'shoot' in b:   # {"target": name | [x, y] studs, "shots": 1, "every": 0.25, "side": "R", "hit": true}: the gun appears in the hand,
+            import guns, vfx   # the arm is up AT t, shots from t + 2 frames (guns.py by Kimi; sound_mix times 'gunshot' the same way)
+            sp_ = b['shoot'] if isinstance(b['shoot'], dict) else {'target': b['shoot']}
+            tg_, side_ = sp_.get('target'), sp_.get('side', 'R'); sc.frame_set(f); bpy.context.view_layer.update()
+            tch_ = cast.get(tg_) if isinstance(tg_, str) else None
+            if isinstance(tg_, str) and tch_ is None and tg_ not in props: log.setdefault('errors', []).append(f"t{b['t']} {b['who']} shoot: unknown target {tg_!r}")
+            else:
+                tp_ = (tch_.torso.matrix_world.translation.copy() if tch_ else target_of(tg_).matrix_world.translation.copy()) if isinstance(tg_, str) else Vector((tg_[0] * S, tg_[1] * S, 3 * S))
+                n_s = max(1, int(sp_.get('shots', 1))); ev_ = max(3, F(sp_.get('every', .25), fps)); shots_ = [f + 2 + i * ev_ for i in range(n_s)]
+                gun_ = guns.make_pistol(f"{b['who']} pistol {f}"); guns.hold(ch, gun_, side_); gun_.scale = (1.5, 1.5, 1.5)   # Roblox tool size (~0.8 stud)
+                guns.show(gun_, f - 8, shots_[-1] + 14); guns.aim(sc, ch, tp_, f, shots_[-1] + 6, side_)
+                for fs_ in shots_:
+                    def shot_job(fs_=fs_, g_=gun_, tp_=tp_, ch_=ch, side_=side_):   # a vfx job returns the objects it made (renamed 'VFX ...')
+                        before = set(bpy.data.objects); guns.shoot(sc, ch_, g_, tp_, fs_, side_)
+                        return [o for o in bpy.data.objects if o not in before]
+                    vfx_jobs.append(shot_job)
+                    if tch_ is not None and sp_.get('hit', True):   # the target jolts at every hit; blood if the story asks for it
+                        poses.beat(sc, tch_, fight.MOVES['hit_body'], fs_ + 1, move=2, antic=0, over=0, settle=0)
+                        face_sched[tch_.name][fs_ + 1] = 'scream'
+                        if fight.STYLE.get('blood'): vfx_jobs.append(lambda fs_=fs_, tp_=tp_: vfx.blood(sc, tp_, fs_ + 1, .9, seed=fs_))
+                if tch_ is not None and sp_.get('hit', True): poses.beat(sc, tch_, {'head': (0, 0, 0), 'body': (0, 0, 0)}, shots_[-1] + 10, move=6, antic=0, over=0, settle=0)
+                log.setdefault('shots', []).extend([round(x / fps, 3) for x in shots_])
+                settle[b['who']] = max(settle.get(b['who'], 0), shots_[-1] + 12)
         if 'wiggle' in b:
             poses.wiggle(sc, ch, b['wiggle'], f, f + F(b.get('wiggle_s', 0.8), fps))
         if 'anim' in b:   # Roblox R6 animation library (anims.py): {"anim": "dance2", "loop": 2.0 (seconds, repeats), "anim_speed": 1.0, "anim_skip": ["legR"]}
             import anims
-            if b['anim'] not in anims.slugs(): log.setdefault('errors', []).append(f"t{b['t']} {b['who']} unknown anim '{b['anim']}' (valid: {', '.join(anims.slugs())})")
+            if b['anim'] not in anims.slugs() and b['anim'] in anims.STAND_IN:   # a library clip Roblox refused on this PC: stand-in or no clip
+                sub_ = anims.resolve(b['anim']); log.setdefault('notes', []).append(f"t{b['t']} {b['who']} anim {b['anim']} is not on this PC (Roblox refused it) -> {sub_ or 'no clip'}")
+                b['anim'] = sub_ or b['anim']
+            if b['anim'] not in anims.slugs():
+                if b['anim'] not in anims.STAND_IN: log.setdefault('errors', []).append(f"t{b['t']} {b['who']} unknown anim '{b['anim']}' (valid: {', '.join(anims.slugs())})")
             else:
                 seated_ = any(sp[0] == b['who'] and sp[1] <= f <= sp[2] for sp in log.get('sit_spans', []))
                 hair_ = lambda c_: [h for h in c_.hair_pivot.children_recursive if h.type == 'MESH']
@@ -2261,7 +2295,7 @@ def build(spec, log):
         face_seq[name] = [(f_, acting.to_family(k_, fam_, faces.library(), fm_)) for f_, k_ in face_seq[name]]
         face_sched[name] = faces.blinks(name, {f_: acting.to_family(k_, fam_, faces.library(), fm_) for f_, k_ in sched.items()}, end=n - 4)
     for ch in cast.values():
-        ia.spring_follow(sc, ch.head, ch.hair_pivot, range(0, n))
+        if not accessories.head_rigid(ch): ia.spring_follow(sc, ch.head, ch.hair_pivot, range(0, n))   # a hat/glasses = welded, no lag
 
     grabs = [(pv, sd, pp, a0, n - 1 if a1 >= END else a1) for pv, sd, pp, a0, a1 in grabs]   # 'until the end' = the FINAL end
     log['holds'] = [[ch_.name, h_, pp.name, a0, a1] for pv, sd, pp, a0, a1 in grabs for ch_ in cast.values() for h_ in 'RL' if ch_.arm[h_] is pv]   # L1 checks: who holds what when
@@ -2358,9 +2392,18 @@ def build(spec, log):
     punch_ = next((x for x in reversed(beats) if x['who'] in cast and x['t'] >= 0.5 * T_end and x['t'] <= T_end - 0.6
                    and any(w_ in str(x.get('face', '')) + str(x.get('pose', '')) for w_ in STRONG_)), None) if spec.get('ecu', True) else None
     looked_ = set()   # props that already got their story-object insert
+    # NEW WALK = NEW TRACKING SHOT (2026-11-16): a tracking shot whose walker starts another walk inside it (a walk back)
+    # kept the first walk's camera and filmed his BACK (a box torso reads the same, the face 'vanished'): cut at that walk's start
+    for sh in [x for x in shots if x.get('track') and len(x.get('on', [])) == 1]:
+        nx_ = min([x['t'] for x in shots if x['t'] > sh['t']] + [T_end])
+        for wb in [x for x in beats if x['who'] == sh['on'][0] and 'walk' in x and sh['t'] + 1.0 <= x['t'] <= nx_ - 1.5]:
+            if not any(abs(x['t'] - (wb['t'] + .5)) < .5 for x in shots):   # +0.5 s: after the start turn (cut before it = his back again)
+                shots.append({**{k_: v_ for k_, v_ in sh.items() if k_ != 'establish'}, 't': round(wb['t'] + .5, 3)})
+                log.setdefault('notes', []).append(f"t{wb['t']} {sh['on'][0]} walks again: tracking shot re-cut at {wb['t'] + .5:.2f}")
+    shots.sort(key=lambda x: x['t'])
     for i, sh in enumerate(shots):
         t1 = shots[i + 1]['t'] if i + 1 < len(shots) else T_end; dur = t1 - sh['t']
-        if sh.get('hold') or sh.get('fight') or dur <= 2.2 or (sh.get('track') and dur <= 3.0):   # a fight two-shot is cut by the fight rules (arrival, landing), not by the rhythm   # reference measured: median 1.5 s, p75 2.0 s (101 cuts)
+        if sh.get('hold') or sh.get('fight') or dur <= 2.2 or (sh.get('track') and dur <= 3.0) or (sh.get('keep_two') and sh.get('profile')):   # a side-on two-shot IS the point: pieces turned +-35 deg filmed the talker's back (test Short 2026-11-16: two pieces had faces on 0 % of frames)   # a fight two-shot is cut by the fight rules (arrival, landing), not by the rhythm   # reference measured: median 1.5 s, p75 2.0 s (101 cuts)
             out_sh.append(sh); continue
         k = math.ceil(dur / 1.6); step = dur / k
         for j in range(k):

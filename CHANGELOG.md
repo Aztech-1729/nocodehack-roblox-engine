@@ -3,6 +3,38 @@
 Every fix to the NoCodeHack Roblox Engine, newest first: what you saw, why it happened, what changed, and how it was tested.
 Found a problem? Open an issue or comment on the video, it lands here.
 
+## 1.12.1 · 2026-11-17 · Roblox Studio: close it after setup
+
+**What you asked:** does Roblox Studio have to stay open after the MCP setup?
+
+**Answer, now in the README and in Claude's rules:** no. Studio is only used for the one-time library fetch (hair,
+animations, sets). When `status` is complete, Claude tells you setup is done and that you can close Studio. Making Shorts
+never uses it; Claude asks you to reopen it only if an update adds new library items.
+
+**Checked in the code:** only the fetch tools talk to Studio; story checks, builds, renders and the sound mix never do.
+
+## 1.12.0 · 2026-11-17 · Animations Roblox won't let your account load no longer block setup
+
+**What you saw:** "no permission" when Claude downloaded the animations (thanks for reporting it on the video), and setup
+would not finish, because the rules said every animation had to be there before the first Short.
+
+**Why:** some clips in the library belong to other Roblox creators. Roblox lets each account load only the animations it is
+allowed to, so on some accounts a few clips are refused. That is Roblox's permission, not a broken setup.
+
+**What changed:**
+- `collect anims` now says `REFUSED <clip>` in plain words and moves on. `status` counts a few refused clips as done.
+- Every clip has a stand-in (for example `agree` -> `wave`, `haha` -> `laugh`). A story that asks for a refused clip plays
+  the stand-in, or no clip, and the build goes on; `story_lint` shows it as a warning instead of an error.
+- Claude tells you in one line which clips were refused and that nothing is broken.
+
+**Also in this build:** a `shoot` beat (pistol, muzzle flash, tracer, recoil, gunshot sound), optional `blood` and `bruises`,
+a pastel `vice` street set with palms, smoother turns (the head leads), no anime aura on punch combos unless a story asks,
+skin that keeps its Roblox yellow in bright scenes, and a side-on two-shot that keeps both faces.
+
+**Tested:** a fresh copy of this release with `agree` and `tantrum` removed: `status` reports anims 22/24 as fine, the story
+check shows two warnings instead of errors, and a store story that uses both clips builds with `wave` and `dance` in their place.
+New unit test `tests/test_anim_refused.py`; all 63 stories still pass the story check.
+
 ## 1.11.1 · 2026-11-15 · Reliability fixes from a community audit (thanks @Aztech-1729)
 
 Our first outside contribution: [@Aztech-1729](https://github.com/Aztech-1729) audited the engine line by line

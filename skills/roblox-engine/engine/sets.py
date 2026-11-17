@@ -659,7 +659,8 @@ def _outdoor(preset, info):
             o.data.materials.append(rooms.mat('hill ' + c + t + str(ring), col(c, haze), 0.95)); o.data.polygons.foreach_set('use_smooth', [False] * len(o.data.polygons))
             o.visible_shadow = False
     trees = ['tree_default', 'tree_blocks', 'tree_cone'] if preset != 'wasteland' else ['cactus_tall', 'rock_tallA']
-    if preset in ('park', 'forest', 'street', 'city'):    # tree line between the play area and the hills, plus a few far houses/skyline
+    if preset == 'vice': trees = ['tree_palmTall', 'tree_palmDetailedTall', 'tree_palmBend']   # palm skyline
+    if preset in ('park', 'forest', 'street', 'city', 'vice'):    # tree line between the play area and the hills, plus a few far houses/skyline
         for i in range(34):
             a = 2 * math.pi * i / 34 + rng.uniform(-.05, .05); r = rng.uniform(78, 100)
             assets.place(rng.choice(trees), (r * math.cos(a), r * math.sin(a) * .85), rot=rng.uniform(0, 360), scale=rng.uniform(2.4, 3.6), solid=False, register=False)
@@ -689,8 +690,8 @@ def _outdoor(preset, info):
             if x % 20 == 0: assets.place('tree_blocks', (x + 3, D / 2 + 3), scale=2.2, rot=rng.uniform(0, 360))
         for x in (-28, 28):               # rear-camera side: only far, non-blocking green
             assets.place('plant_bushLarge', (x, -D / 2 + 2), scale=1.8, solid=False)
-    elif preset in ('street', 'city'):
-        for x in (-34, 34): lamp(x, 1.5 if preset == 'street' else 6.5)
+    elif preset in ('street', 'city', 'vice'):
+        for x in (-34, 34): lamp(x, 6.5 if preset == 'city' else 1.5)
     elif preset == 'forest':
         for i in range(10):
             a = rng.uniform(0, 2 * math.pi); r = rng.uniform(40, 56)

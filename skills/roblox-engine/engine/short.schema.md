@@ -78,6 +78,7 @@ Story rules (story.py):
 | `hallway` | interior | 14 x 32 | bench, plant, bookcases |
 | `classroom2` | interior | 30 x 28 | 6 desks + chairs, `teacher desk`, bookcases |
 | `street` | exterior | 80 x 70 | grass ground, suburban road, houses, fences, trees; day only |
+| `vice` | exterior | 80 x 70 | GTA-style beach town: the street layout with pastel shop blocks, palm rows and a palm skyline, sports cars, pink/teal kerbs; pair with mood `warm` or `sunset` |
 | `park` | exterior | 70 x 60 | grass, path |
 | `wasteland` | exterior | 80 x 70 | sand, rock pillars around a clear ~14-stud fighting circle, mesas on the horizon (fights) |
 | `classroom` | sets.py | fixed | the default; own geometry (board, desks). Keys: `board` (text), `notes` (list of wall notes), `desks` (list of `{at:[x,y], main, chair}`, `at` is in classroom model units, not studs; use the default unless needed) |
@@ -154,6 +155,7 @@ Story rules (story.py):
 | `hair_style` | `spiky` | `spiky`, `short`, `long`, `ponytail`, `bun`, `none`, or a REAL Roblox hair `lib:<tag or id>` e.g. `lib:goku1`, `lib:vegeta2`, `lib:afro1` (list + pictures: assets/hair/LIBRARY.md, assets/hair/sheet.jpg). `hair` colour recolours it. |
 | `face_marks` | none | list of scars drawn on every face decal the character wears (twins, blinks, both families): `scar_x_cheek_L` (X on the left cheek), `scar_eye_R` (vertical scar over the right eye). Unknown name = a note in log errors, no crash. |
 | `outfit` | none | Real Roblox classic clothing: `{"shirt": "lib:<tag>", "pants": "lib:<tag>"}` (either optional), e.g. `{"shirt": "lib:hoodie1", "pants": "lib:jeans1"}`. Tags: assets/outfits/LIBRARY.md, pictures assets/outfits/sheet.jpg (school_uniform, suit, hoodie, gi, kimono, armor, dress, plaid_skirt, ...). Transparent parts show `shirt`/`pants` colours. Unknown tag = note + plain colour. |
+| `accessories` | none | Real Roblox accessories welded at their Roblox attachment points: `["lib:<tag>", ...]`, e.g. `["lib:glasses1", "lib:cap1", "lib:backpack2"]`. Glasses = FaceFrontAttachment, hats/caps = HatAttachment (the hair under a hat is compressed inside it: no hair through the hat), backpacks/capes = BodyBackAttachment. Tags + pictures: assets/accessories/LIBRARY.md, sheet.jpg. A head accessory welds the hair too (no hair spring lag). Glasses4/6/7/8 cross long fringes: pair them with short hair. Swap mid-scene with the `wear`/`remove` beats. |
 | (casting) | | Long HANGING hair (pigtails, long_straight, wavy) + one-hand face poses (cover_mouth, facepalm, think) can clip: rigid R6 arms pass through the locks (> 10 cm, gate fails; the engine tries both hands first). Prefer short/bun/ponytail hair for characters who touch their face. |
 
 - The first `cast` entry of a scene is the **hero**: the cut-jump check uses its head.
@@ -178,6 +180,7 @@ Story rules (story.py):
 
 **kind:**
 - Built-in: `box` (default), `book`, `phone`, `ball`, `cake`.
+- Roblox tool (Gear) from the accessory library: `lib:sword1` (classic Linked Sword). Use with `held_by`: its Roblox Tool Grip sits in the hand (blade up).
 - Any Kenney model: `kit/name` (e.g. `food-kit/cookie`, `food-kit/pizza-box`) or a bare stem (`laptop`). Props are holdable copies, not obstacles, and are scaled to at most 0.8 m.
 - Kit names with scale factors (assets.py KIT_SCALE): furniture-kit, building-kit, car-kit, city-kit-suburban, city-kit-commercial, city-kit-roads, nature-kit, retro-urban-kit, mini-shop, food-kit.
 
@@ -217,7 +220,11 @@ Each beat: `t` (seconds, required), `who` (cast name, required). Beats run in ti
 | `block` | true | guard pose at `t` |
 | `dodge` | `back`, `R`, `L` | 1.5-stud dodge reached at `t`, returns over 8 frames |
 | `knockback` | `{from, distance: 8, height: 2}` | launched away from `from` (a cast name), lands on the back (+ dust). `get_up` afterwards works. The landing never touches another actor (standing or lying) or a set piece: the blast is turned or shortened |
-| `knockback` extras | `to: [x, y]`, `pose: "curl"`, `side: R/L` | `to` = the spot (studs) the root lands on (overrides `distance`); `pose: curl` = lands lying on its side, curled, face down, in a bigger crater (radius 2.6), the "defeated in a crater" meme; `get_up` rolls it back and stands up |
+| `knockback` extras | `to: [x, y]`, `pose: "curl"`, `side: R/L` | `to` = the spot (studs) the root lands on (overrides `distance`); `pose: curl` = lands lying on its side, curled, face down, in a bigger crater (radius 2.6), the "defeated in a crater" meme; `get_up` rolls it back and stands up; `crater: false` = dust only (no crater for a street fight; default true for height >= 1.5 or distance >= 6) |
+| `shoot` | `{target, shots: 1, every: 0.25, side: "R", hit: true}` | a pistol appears in the hand (8 frames before `t`), the arm is raised and aimed AT `t`, shots fire from `t` + 2 frames every `every` s: muzzle flash, tracer, smoke, recoil, light flash, a gunshot sound each. `target` = a cast name (aims at the chest; the target jolts at each hit, `hit: false` = a miss) or `[x, y]` studs. Gun by Kimi (guns.py) |
+| story / scene `blood` | `true` | landed strikes and gun hits throw cartoon blood drops (matte dark red, ~0.4 s); with `bruises` the 3rd landed head strike also leaves a blood trickle at the mouth corner |
+| story / scene `bruises` | `true` | every landed head strike adds the next blue-violet bruise to the target's face from that moment on (right eye, left cheek, brow, left eye, right cheek). Scene continuity: give the next scene's cast `face_marks: ["bruise_eye_R", ...]` (also `blood_mouth`, `blood_brow`) |
+| `attack` flurry `aura` | `true` or `"#hex"` | an aura flares round the attacker during a flurry; OFF by default (street fights have none) |
 | `down` | `{pose: "curl", crater: true, side, yaw}` | at `t` (use 0) the character is already lying curled over its `at`, crater already there; auto acting, gaze and `look` leave it alone until `get_up` |
 | `fly` | `{to, height: 4, s: 1.0}` | `to` = list of `[x, y]` studs, or a cast name (stops at guard distance). Follow with `land: true`. From the ground it pops straight up over 2 frames first (feet clear, then legs swing and body turns): no takeoff foot slide at any speed |
 | `land` | true or `{crater: true}` | descends to the ground with a bounce (+ dust); `crater` adds a crater and a thick smoke column that hangs ~1 s |
@@ -226,6 +233,8 @@ Each beat: `t` (seconds, required), `who` (cast name, required). Beats run in ti
 | `beam` | `{to, charge: 0.6, s: 1.0, color, hand: R}` | energy ball charges in the hand for `charge` s BEFORE `t` (the ball grows the whole time, a 2.8 s charge is fine), beam fires at `t` for `s` s at the target's chest (+ flash, sparkles). Add a `knockback` beat on the target ~0.15 s later |
 | `beam` extras | `hands: "both"` | two-hand wave: both arms pulled to one hip during the charge, ball between the hands, both thrust forward at `t` |
 | `beam` extras | `deflect: {after: 0.5, to: [x, y, z], hand: R}` | the target holds the beam on one raised palm (no flinch, no knockback), after `after` s flicks it: the beam bends at his hand and shoots to the world point `to` (studs, default up into the sky) until the beam ends, flash at the hand. Needs `0 < after < s - 0.1` |
+| `wear` | `lib:<tag>` | puts that accessory on at `t` (instant, like Roblox). Write a `pose` (e.g. `hands_head`) on a beat just before for the gesture |
+| `remove` | `lib:<tag>` | takes it off at `t` |
 | `exclaim` | true | "!" over the head |
 
 **Fight example** (preset `wasteland` is a battle plateau): `{"t": 1.5, "who": "Goku", "attack": {"move": "punch_R", "target": "Vegeta"}}`, then `{"t": 3.8, "who": "Vegeta", "knockback": {"from": "Goku", "distance": 9, "height": 3}}`. Leave ~0.6 s between one fighter's attacks. **Fight shots:** automatic attack, dodge and knockback coverage uses a wider two-shot of both fighters (`wide`, 35 mm), keeping room for the action. Authored shots keep their requested size and angle. Full test story: stories/saiyan/story.json.
@@ -444,6 +453,7 @@ Top-level story keys (`tools/story_lint.py` checks every one; audio/overlay keys
 | `voices` | `{"Kid": "<voice>"}` | character voices for `say` lines (names must be in the cast) |
 | `cards` | list of `{"type": title/time/label/counter/choice, "text", "scene": N, "t": s-into-scene, "dur": s}`; `choice` has `a` and `b` instead of `text` | timed text cards. The window `t..t+dur` must lie inside the scene |
 | `split` | `[[1, 2]]` | scene pairs stacked top/bottom (versus). Same `seconds` in both, a `label` card each |
+| `hud` | `{"health": [[t, 0-100]], "armor": [[t, 0-100]], "stars": [[t, 0-5]], "money": [[t, n]], "banners": [{"t", "dur", "text", "color"}], "switch": {"t", "dur", "options": [{"name", "color", "dead"}], "pick", "pick_at"}, "off": [[t0, t1]], "blips": [[t0, t1, dx, dy, "#hex"]], "y": 330}` | game HUD burned by `sound_mix.py` (tools/overlays.py `hud_events`): minimap + health/armor bars top-left, wanted stars (new ones flash) + money top-right, under the header and out of the platform UI zones; `banners` = big centre text (WASTED); `switch` = character-switch wheel, highlight jumps to `pick`. Times = seconds of the FINAL Short (scene offsets included) |
 
 Scene key `crowd`: `{"n": 1..40, "area": "back" | "sides" | "all", "act": "idle" | "cheer" | "mixed"}`. Background extras (built-in parts, random built-in looks, idle breathing or a cheer/applaud/haha clip), built after the gates and cameras: never gated, never in a camera's way of the cast, never on an authored character's path. Fewer than `n` appear when the room is full (see `report.json` notes).
 

@@ -394,6 +394,10 @@ def _lowkey(sc, enabled):
         night = mood == 'night' or sc.get('look_time') == 'night'
         day_exterior = sc.get('look_outdoor') and sc.get('look_time', 'day') == 'day' and mood in ('default', 'warm', 'cool')
         sc['look_day_exterior'] = bool(day_exterior)
+        # WARM day exterior: the mood's own 900 W 'Golden key' already lights the cast; the full day key + sky fill on top washed
+        # Roblox yellow to cream and a #8A8F96 shirt to near white (2026-11-16: skin 244,218,164 -> 213,176,73)
+        # default/cool too: the vice still read (248,225,177) on a #F5CD30 arm; .4/.5 -> (224,191,108) (trace 20261116)
+        dk_, df_ = (.25, .4) if mood == 'warm' else (.4, .5)
         interior_day = not sc.get('look_outdoor') and mood in ('default', 'warm', 'cool') and not night
         ambient = (1.25 if not sc.get('look_outdoor') else .4) if mood == 'spooky' else (
             1.8 if night else 1.2 if mood == 'sunset' else .7 if interior_day and mood == 'default' else 1)
@@ -421,6 +425,7 @@ def _lowkey(sc, enabled):
         # Cap exposure-adjusted night keys too: living_room's +0.8 EV otherwise clips yellow arms.
         night_exposure = _NIGHT_EXPOSURE.get(sc.get('look_preset'), 0) if mood == 'night' else 0
         key_watts = min(400, 240 * 2 ** -night_exposure) if night else 400
+        if mood == 'dramatic': key_watts *= .4   # dramatic: the 400 W cast key washed #F5CD30 skin to (230,209,161); x.4 -> (210,185,115) (2026-11-16)
         # Head targets keep the local pools on seated, walking and off-centre cast too.
         for head in [o for o in sc.objects if o.name.endswith(' head mesh')]:
             root = head
@@ -460,7 +465,7 @@ def _lowkey(sc, enabled):
             for fc in fcurves_of(frame):
                 for k in fc.keyframe_points: k.interpolation = 'CONSTANT'
             for role, offset, watts, color, size in (
-                    ('key', (.7, -.5, 2.4), DAY_EXT['key'] if day_exterior else key_watts, key, .4 if mood == 'dramatic' else 1.4),
+                    ('key', (.7, -.5, 2.4), DAY_EXT['key'] * dk_ if day_exterior else key_watts, key, .4 if mood == 'dramatic' else 1.4),
                     ('rim', (-1.2, 1.0, -1.6), 25, rim, .8)):
                 o = _light('Low key ' + role + ' ' + head.name, 'AREA', offset, (0, 0, 0), watts, color, size)
                 o.parent = frame
@@ -472,7 +477,7 @@ def _lowkey(sc, enabled):
             sun = next((o for o in sc.objects if o.type == 'LIGHT' and o.name == 'Sun'), None)
             away = -Vector((sun.location.x, sun.location.y, 0)).normalized() if sun else Vector((-1, 0, 0))
             p = away * 9 + Vector((0, -6, 5))
-            for name, loc, tgt, watts, col, size in (('Day sky fill', tuple(p), (0, 0, 1.2), DAY_EXT['sky_fill'], (.82, .9, 1), 12),
+            for name, loc, tgt, watts, col, size in (('Day sky fill', tuple(p), (0, 0, 1.2), DAY_EXT['sky_fill'] * df_, (.82, .9, 1), 12),
                                                      ('Day ground bounce', (0, -1.5, .05), (0, -1.5, 3), DAY_EXT['bounce'], (1, .86, .66), 8)):
                 _light(name, 'AREA', loc, tgt, watts, col, size)['lowkey_light'] = True
         background = bpy.data.collections.new('Background light receivers')

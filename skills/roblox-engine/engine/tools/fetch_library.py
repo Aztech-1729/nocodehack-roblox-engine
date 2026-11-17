@@ -55,7 +55,8 @@ def unseed(kind):
 def status():
     for k in NEED:
         n, miss = len(manifest(k)), len(missing(k))
-        print(f'{k:8s} {n - miss}/{n}' + ('' if not miss else f'  missing {miss}'))
+        print(f'{k:8s} {n - miss}/{n}' + ('' if not miss else f'  missing {miss}') +
+              ('  (fine when `collect anims` said REFUSED: stories play a stand-in clip)' if k == 'anims' and miss and miss <= n // 2 else ''))
     na = sum((AURA_DIR / f'{i}.png').exists() for i in AURA_IDS)
     print(f'aura     {na}/{len(AURA_IDS)}' + ('' if na == len(AURA_IDS) else '  missing (run public; without them auras fall back to plain glow spheres)'))
     r6 = (A / 'r6_parts.blend').exists()
@@ -93,7 +94,9 @@ def jobs():
     if any(s.startswith('execute_luau') for s in steps): steps.append('`python tools/fetch_library.py collect hair`')
     am = [(m.name, meta(m)) for m in missing('anims')]
     packs = sorted({str(x['id']) for _, x in am if 'Creator Store' in x.get('source', '')})
-    for p in packs: steps.append(f'insert_asset assetId {p}, parentPath game.Workspace.AnimImport, assetName imp_{p} (create the AnimImport Folder first with execute_luau if it is missing)')
+    for p in packs: steps.append(f'insert_asset assetId {p}, parentPath game.Workspace.AnimImport, assetName imp_{p} (create the AnimImport Folder first with execute_luau if it is missing; '
+                                 'use the MCP insert_asset tool, InsertService:LoadAsset is "not authorized" for it. If insert_asset itself says no permission, go on: '
+                                 'the anims job then reports those clips REFUSED and stories use stand-ins)')
     ad = (E / 'tools' / 'anim_dump.luau').read_text(encoding='utf-8'); size = 0; batch = []; parts = []
     for s, x in am:                                   # ~90 000 chars per call (the MCP file route keeps 100 000)
         est = 120 * int(x.get('keys', 100)) * (2 if 'Creator Store' in x.get('source', '') else 1)
@@ -178,6 +181,10 @@ def collect_anims(files):
         t = t[i:]; d, _ = json.JSONDecoder().raw_decode(t)
         for s, a in d.items():
             if s not in want: print('SKIP unknown', s); continue
+            if a.get('refused') or re.search(r'permission|authoriz|denied|\b40[13]\b', str(a.get('err') or ''), re.I):
+                sys.path.insert(0, str(E)); import anims as an_; sub = an_.STAND_IN.get(s)
+                print(f'REFUSED {s}: Roblox gives this account no permission to load animation {a.get("id")} (not a setup error). Optional: '
+                      + (f'stories that ask for it play {sub!r} instead' if sub else 'stories that ask for it play no clip there')); continue
             if a.get('err') or not a.get('kf'): print('FAIL', s, a.get('err')); continue
             kf, keys = a['kf'], int(meta(want[s]).get('keys') or 0)
             if keys and len(kf) > 1.6 * keys: kf = kf[::2] + ([kf[-1]] if (len(kf) - 1) % 2 else [])   # library keeps every 2nd key of baked clips

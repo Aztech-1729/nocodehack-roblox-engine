@@ -144,14 +144,12 @@ def _tinted_image(path, hex_col, name):
     return im
 
 
-def lib_hair(hp, hex_col, key, mat_name, torso=None):
-    """Real Roblox hair accessory under the hair pivot (= the R6 Head's HairAttachment, 0.6 stud above the head centre).
-    Roblox weld: handle = headAtt * inverse(handleAtt); a MeshPart mesh is bbox-centred and scaled Size / MeshSize.
-    Roblox (x right, y up, z back) -> head-local Blender (-x, z, y): the face looks -Y here and -Z in Roblox."""
+def acc_mesh(d):
+    """Roblox accessory folder (mesh.obj + meta.json) -> (meta, P, UV, F): vertices in the accessory's ATTACHMENT frame (Roblox axes,
+    studs). Roblox weld: handle = bodyAtt * inverse(handleAtt); a MeshPart mesh is bbox-centred and scaled Size / MeshSize; a
+    legacy SpecialMesh is v * Scale + Offset (not recentred); legacy Hats use AttachmentPoint the same way."""
     import json
     from mathutils import Vector
-    d = hair_dir(key)
-    if d is None: raise KeyError(f'hair {key} not in assets/hair')
     meta = json.loads((d / 'meta.json').read_text())
     V, UV, F = [], [], []
     for ln in open(d / 'mesh.obj'):
@@ -169,24 +167,41 @@ def lib_hair(hp, hex_col, key, mat_name, torso=None):
         P = [Vector((v[i] * sc[i] + of[i] for i in range(3))) for v in V]
     a = meta.get('att') or meta.get('attach_point')
     A = Matrix(((a[3], a[4], a[5], a[0]), (a[6], a[7], a[8], a[1]), (a[9], a[10], a[11], a[2]), (0, 0, 0, 1))) if a else Matrix()
-    M = A.inverted() if meta.get('att') else Matrix.Translation((0, -0.1, 0)) @ A.inverted()   # legacy hats hang from head top (0.5)
-    P = [M @ p for p in P]
+    M = A.inverted()
+    return meta, [M @ p for p in P], UV, F
+
+
+def torso_fit(Q, frame, torso):
+    """R15-made long hair / accessories cut into the deeper R6 chest: push vertices (Q, `frame`-local metres) inside the torso box
+    out to its nearest face; then the shoulder fit below."""
+    from mathutils import Vector
+    bpy.context.view_layer.update()
+    T = frame.matrix_world.inverted() @ torso.matrix_world; c = [T @ Vector(b) for b in torso.bound_box]
+    lo_t, hi_t = Vector([min(v[i] for v in c) for i in range(3)]), Vector([max(v[i] for v in c) for i in range(3)])
+    g = 0.04 * S; n_in = 0
+    for q in Q:
+        if all(lo_t[i] - g < q[i] < hi_t[i] + g for i in range(3)) and q.z < hi_t.z - 0.05 * S:
+            i, side = min(((i, sd) for i in (0, 1) for sd in (0, 1)), key=lambda t: abs(q[t[0]] - (lo_t, hi_t)[t[1]][t[0]]))
+            q[i] = (lo_t[i] - g) if side == 0 else (hi_t[i] + g); n_in += 1
+    # SHOULDER FIT (R210): wide hair (curly/afro/long) hanging beside the torso below the shoulder top sits inside the arm
+    # columns, so every raised/forward arm went through it (blind6_white_bedroom: give 24 cm, shrug 16 cm). Pull those
+    # vertices in to the torso sides; hair above the shoulders and behind/in front of the torso keeps its shape.
+    for q in Q:
+        if q.z < hi_t.z + 0.15 * S and (q.x < lo_t.x - g or q.x > hi_t.x + g):
+            q.x = lo_t.x - g if q.x < lo_t.x else hi_t.x + g
+
+
+def lib_hair(hp, hex_col, key, mat_name, torso=None):
+    """Real Roblox hair accessory under the hair pivot (= the R6 Head's HairAttachment, 0.6 stud above the head centre).
+    Roblox weld: handle = headAtt * inverse(handleAtt); a MeshPart mesh is bbox-centred and scaled Size / MeshSize.
+    Roblox (x right, y up, z back) -> head-local Blender (-x, z, y): the face looks -Y here and -Z in Roblox."""
+    from mathutils import Vector
+    d = hair_dir(key)
+    if d is None: raise KeyError(f'hair {key} not in assets/hair')
+    meta, P, UV, F = acc_mesh(d)
+    if not meta.get('att'): P = [Matrix.Translation((0, -0.1, 0)) @ p for p in P]   # legacy hats hang from head top (0.5)
     Q = [Vector(((-p.x) * S, p.z * S, p.y * S)) for p in P]
-    if torso is not None:   # R15-made long hair cuts into the deeper R6 chest: push those vertices out to the nearest torso face
-        bpy.context.view_layer.update()
-        T = hp.matrix_world.inverted() @ torso.matrix_world; c = [T @ Vector(b) for b in torso.bound_box]
-        lo_t, hi_t = Vector([min(v[i] for v in c) for i in range(3)]), Vector([max(v[i] for v in c) for i in range(3)])
-        g = 0.04 * S; n_in = 0
-        for q in Q:
-            if all(lo_t[i] - g < q[i] < hi_t[i] + g for i in range(3)) and q.z < hi_t.z - 0.05 * S:
-                i, side = min(((i, sd) for i in (0, 1) for sd in (0, 1)), key=lambda t: abs(q[t[0]] - (lo_t, hi_t)[t[1]][t[0]]))
-                q[i] = (lo_t[i] - g) if side == 0 else (hi_t[i] + g); n_in += 1
-        # SHOULDER FIT (R210): wide hair (curly/afro/long) hanging beside the torso below the shoulder top sits inside the arm
-        # columns, so every raised/forward arm went through it (blind6_white_bedroom: give 24 cm, shrug 16 cm). Pull those
-        # vertices in to the torso sides; hair above the shoulders and behind/in front of the torso keeps its shape.
-        for q in Q:
-            if q.z < hi_t.z + 0.15 * S and (q.x < lo_t.x - g or q.x > hi_t.x + g):
-                q.x = lo_t.x - g if q.x < lo_t.x else hi_t.x + g
+    if torso is not None: torso_fit(Q, hp, torso)
     me = bpy.data.meshes.new(f'hair lib {d.name}')
     me.from_pydata([tuple(q) for q in Q], [], F)
     if UV:

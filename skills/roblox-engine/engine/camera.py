@@ -1464,6 +1464,10 @@ def _shot(sc, name, f0, f1, kind='medium', subjects=(), side=0.0, lens=50, push=
                     if k_: out.append((0.0, k_[0][1], k_[0][2], lens * lm_, {}, {}, lead_jump(k_[0][1], k_[0][2]), k_))
             return out
         rounds.append(lead_round)
+        # A WALKER WHO CROSSES THE FRAME (> 4 studs in a close/medium): try the travelling camera FIRST. A fixed camera that only
+        # re-aims let Dave walk into it (test Short 2026-11-16: medium -> big close-up in 2 s)
+        if len(subj_chars) == 1 and kind in ('close', 'medium') and not angle and not lying and max((q - per[0][0]).length for q in per[0]) > 4 * S:
+            rounds.insert(0, rounds.pop())
     print('LEAD', name, 'can_lead', can_lead, 'moving', moving, 'track', track, 'kind', kind, 'motion', motion)
     rounds += rounds_extra
     rounds.append(lambda: choose(gen_cands(tuple(range(0, 360, 30)), (1.0, 1.6, 2.2) if is_insert else (1.0, 0.8, 1.25))))
