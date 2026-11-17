@@ -101,7 +101,7 @@ Shots for it (side-on two-shots, then the body from above):
 {"t": 9.15, "kind": "wide", "on": ["Vegeta"], "angle": "top", "profile": true, "lens": 35, "frame": 11, "move": "still", "hold": true}
 ```
 Strikes: `punch_R`, `punch_L`, `kick_R`, `uppercut_R`, `tap_R`. The fist lands AT `t`; the wind-up starts 0.55 s before, and the
-attacker must be within 6.6 studs of the target at that moment. Leave 0.6 s between one fighter's strikes (or use `flurry`).
+attacker must be within 6.6 studs of the target at that moment. Leave 0.6 s between one fighter's strikes (or use `flurry`). A flurry has no aura unless you ask: `"aura": true` (or `"#hex"`) for an anime fight.
 Knockback 0.1 s after the hit; `to` must be free floor (>= 3 studs from anyone). A later scene can start the body down:
 `{"t": 0, "who": "Vegeta", "down": {"pose": "curl", "crater": true}}` with the cast `at` = the landing point.
 
@@ -147,7 +147,7 @@ Aura only (no brace pose): `{"t": 9.25, "who": "Yamcha", "aura": {"s": 3.0, "col
 2. Dialogue: `medium` on the speaker, `close` for the punchline face. `hold: true` stops the automatic splitter.
 3. `"establish": false` (scene key) when the scene should open on a face, not on a tiny-people wide.
 4. `"pitch": false` (scene key) when big hair hides faces under automatic high angles.
-5. Fight two-shots: `"profile": true` + `"keep_two": true`, or the camera may sit behind one fighter.
+5. Fight two-shots: `"profile": true` + `"keep_two": true`, or the camera may sit behind one fighter. Such a side-on two-shot is never split for rhythm (it plays as one held shot).
 6. A body on the ground: `"kind": "wide", "angle": "top", "frame": 11, "move": "still"`. Never a close-up on someone lying or flying.
 7. Two characters > 8 studs apart in one shot become a single unless `keep_two: true`.
 8. Close-ups sit the face high; captions take the lower third. Check one captioned frame for a cropped chin.

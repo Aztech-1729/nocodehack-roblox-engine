@@ -964,6 +964,17 @@ def impact_flash(sc, point, frame, color='#FFF19A', size=1.0):
     return objects + [_lamp('Impact light', P, color, *w, ((frame - 1, 0), (frame, 300 * size), (frame + 1, 500 * size), (frame + 4, 0)))]
 
 
+def blood(sc, point, frame, k=1.0, seed=0):
+    """Cartoon blood (creator 2026-11-16 'gun shooting and blood'): dark red drops + a few streaks thrown out of a hit on
+    ballistic arcs, falling with gravity, ~10 frames; matte (mix), never glowing."""
+    view = _viewer(sc); P = Vector(point); out = []
+    for i, (spr, n, size, streak) in enumerate(((('circle_05',), int(12 * k), .11 * k, False), (('trace_01',), int(6 * k), .18 * k, True))):
+        cards = burst(sc, P, frame, spr, n=max(1, n), speed=3.0 * k, life=10, gravity=9.8, color='#8E0B14', size=size, strength=.8, seed=seed + i * 101,
+                      streak=streak, up=.6, mode='mix', toward=.18, scale=((0, 1), (1, .75)), alpha=((0, 1), (.75, 1), (1, 0)), view=view, name='VFX blood')
+        out += cards
+    return out
+
+
 def dust_burst(sc, point, frame, k=1.0):
     """Soft dust kicked out along the ground: puffs that expand, drift outward and up, and fade (10 frames)."""
     if not _v2('dust_burst'): return _dust_burst_v1(sc, point, frame, k)

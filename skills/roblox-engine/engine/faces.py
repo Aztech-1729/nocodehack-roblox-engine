@@ -199,6 +199,8 @@ def image(kind, n=512, name=''):
     # mouths
     if talk and kind in ('o', 'scream', 'laugh'):   # an already open mouth: the talk twin half closes it
         if kind == 'o': a |= ell(0.5, 0.29, 0.07, 0.065)
+        elif kind == 'scream':   # a rounder, smaller shout (a flat-topped D read as a grin: s02 'Am I... in a GAME?' flicker, 2026-11-15)
+            m = ell(0.5, 0.27, 0.10, 0.10); a |= m; white |= m & (yy > 0.335)
         else:
             m = ell(0.5, 0.29, 0.13, 0.085) & (yy < 0.33); a |= m; white |= m & (yy > 0.295)
     elif talk:                                  # speaking: an open version of the SAME mouth mood (a frown opens as a frown, never a smile)
@@ -208,8 +210,8 @@ def image(kind, n=512, name=''):
         elif kind in ('smug', 'neutral', 'sheepish', 'confused'):   # flat mood: a plain open oval
             m = ell(0.5, 0.30, 0.10, 0.06); a |= m
         else:                                   # smile moods: D-shaped mouth, teeth strip on top
-            m = ell(0.5, 0.29, 0.12 if kind not in ('grin', 'joy') else 0.15, 0.085) & (yy < 0.33)
-            a |= m; white |= m & (yy > 0.29)
+            m = ell(0.5, 0.30, 0.165 if kind not in ('grin', 'joy') else 0.19, 0.095) & (yy < 0.34)   # as wide as the closed smile: a narrow D read as the mouth shrinking (s01 flicker)
+            a |= m; white |= m & (yy > 0.30)
     elif kind in ('smile', 'blink'):
         arc = 0.36 - 0.13 * np.sqrt(np.clip(1 - (x / 0.2) ** 2, 0, 1))
         a |= (abs(x) < 0.22) & (abs(yy - arc) < 0.05)
@@ -266,7 +268,17 @@ MARKS = {'scar_x_cheek_L': [((.74, .57), (.84, .45), .014), ((.74, .45), (.84, .
          'scar_eye_R': [((.37, .86), (.43, .54), .018)],
          'dots6_forehead': [((u, v), (u + .001, v), .030) for u in (.46, .54) for v in (.983, .943, .903)]}   # six incense dots (a tiny stroke = a round dot)
 MARKS['veins_head'] = [((.30, .99), (.38, .86), .012), ((.38, .86), (.33, .80), .010), ((.50, .99), (.50, .88), .012), ((.50, .88), (.56, .83), .010), ((.70, .99), (.63, .87), .012), ((.63, .87), (.68, .81), .010)]   # creature veins over the brow
-_MARK_COLS = {'dots6_forehead': (196, 142, 104), 'veins_head': (38, 92, 30)}   # per-mark colour (default _MARK_COL)
+# BRUISES ('blue marks', creator 2026-11-16): soft blue-violet blobs; a tiny stroke with a big width = a round blob. Drawn-family eyes
+# sit at u .32/.68, v .62; the mouth band is v < .40.
+MARKS.update({'bruise_eye_R': [((.27, .52), (.37, .52), .10)], 'bruise_eye_L': [((.63, .52), (.73, .52), .10)],
+              'bruise_cheek_R': [((.17, .45), (.19, .43), .09)], 'bruise_cheek_L': [((.81, .45), (.83, .43), .09)],
+              'bruise_brow': [((.44, .90), (.56, .90), .08)],
+              'blood_mouth': [((.66, .33), (.68, .22), .025), ((.68, .22), (.675, .17), .018)], 'blood_brow': [((.58, .93), (.61, .80), .02)]})
+_MARK_COLS = {'dots6_forehead': (196, 142, 104), 'veins_head': (38, 92, 30), **{m: (88, 66, 168) for m in MARKS if m.startswith('bruise')},
+              'blood_mouth': (150, 12, 22), 'blood_brow': (150, 12, 22)}   # per-mark colour (default _MARK_COL)
+_MARK_SOFT = {m: 10.0 for m in MARKS if m.startswith('bruise')}   # soft edge in px (default 2.5): a bruise has no outline
+_MARK_ALPHA = {m: .62 for m in MARKS if m.startswith('bruise')}   # see-through: the skin shows through a bruise
+BRUISE_ORDER = ('bruise_eye_R', 'bruise_cheek_L', 'bruise_brow', 'bruise_eye_L', 'bruise_cheek_R')
 _MARK_COL = (112, 28, 22)
 _MARKS = {}   # char name -> [valid mark names]
 NOTES = []    # unknown mark names (reported by build.py as errors, never a crash)
@@ -287,7 +299,8 @@ def mark_layer(W, H, marks):
         for (u0, v0), (u1, v1), w in MARKS[m]:
             dx, dy = u1 - u0, v1 - v0; t = np.clip(((x - u0) * dx + (y - v0) * dy) / (dx * dx + dy * dy), 0, 1)
             d = np.hypot(x - (u0 + t * dx), y - (v0 + t * dy))
-            a = np.maximum(a, np.clip((w / 2 + 1.25 * px_ - d) / (2.5 * px_), 0, 1))
+            sf = _MARK_SOFT.get(m, 2.5); a = np.maximum(a, np.clip((w / 2 + sf / 2 * px_ - d) / (sf * px_), 0, 1))
+        a = a * _MARK_ALPHA.get(m, 1.0)
         new = a > out[..., 3]   # each mark keeps its own colour where it is the strongest
         out[new, :3] = np.array(_MARK_COLS.get(m, _MARK_COL), np.float32) / 255; out[..., 3] = np.maximum(out[..., 3], a)
     return out
@@ -316,6 +329,22 @@ def _decal(name, k, head_pivot, hidden):
     img = _marked(name, img)
     o = cs.face_decal(f'{name} face {k}', HEAD_R, HEAD_H, img, head_pivot)
     o.hide_render = o.hide_viewport = hidden
+    return o
+
+
+def add_marks(name, marks, frame):
+    """Marks that APPEAR at `frame` (a bruise after a punch): one transparent overlay decal over every face, shown from frame on.
+    Each call adds a layer (the overlay of the previous call stays). Unknown marks -> NOTES. Returns the decal or None."""
+    ok = [m for m in marks if m in MARKS]
+    NOTES.extend(f'{name}: unknown face mark {m!r}' for m in marks if m not in MARKS)
+    if not ok or name not in _HEAD: return None
+    n_ = sum(1 for o in bpy.data.objects if o.name.startswith(f'{name} marks@'))
+    img = bpy.data.images.new(f'marks {name} {frame}', 256, 256, alpha=True); img.alpha_mode = 'STRAIGHT'
+    img.pixels.foreach_set(mark_layer(256, 256, ok).ravel().astype(np.float32)); img.pack()
+    o = cs.face_decal(f'{name} marks@{frame}', HEAD_R + .002 * (n_ + 1), HEAD_H, img, _HEAD[name])   # each layer 1 mm further out (no z-fight)
+    for f, hide in ((0, True), (frame - 1, True), (frame, False)):
+        if f < 0: continue
+        o.hide_render = o.hide_viewport = hide; o.keyframe_insert('hide_render', frame=f); o.keyframe_insert('hide_viewport', frame=f)
     return o
 
 

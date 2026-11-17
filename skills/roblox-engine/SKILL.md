@@ -34,6 +34,28 @@ You make animated Roblox-style Shorts. You never animate by hand: you write ONE 
      Roblox Studio MCP tools, then `status`. Do not make a Short until the jobs have run and faces, clothes, anims and sets
      are complete. Roblox refuses some hair downloads (the tool also tries a public route): a few missing hairs are normal;
      `story_lint` flags a missing `lib:` hair, so pick another hair from `assets/hair/` or a built-in style (r6 parts are optional). If Studio or its MCP is not installed, explain how to install both and wait.
+   - Animations: `collect anims` prints `REFUSED <clip>` when Roblox gives the user's account no permission for that clip. Tell the
+     user in one line: "Roblox didn't let your account load N animations (their owners restrict them). Nothing is broken: stories
+     that use them play a similar clip instead." Do not retry, do not ask them to fix permissions; a few REFUSED anims count as complete.
+   - When `status` is complete, tell the user in one line: "Setup done. You can close Roblox Studio; I'll ask you to open it
+     again when a story needs something new from Roblox." After setup, Studio is only used through section 1b.
+
+## 1b. New assets from Roblox (any time, not only at setup)
+Roblox Studio is closed by default. Whenever something is needed that is not on this PC (`story_lint` says NEEDS STUDIO, a story
+wants a model, hair, set or accessory that is missing, or `status` shows missing items after an engine update):
+1. Check the Studio MCP first (list the Studio instances). Never assume Studio is open.
+2. Not connected: tell the user in one short message, then wait: "Open Roblox Studio (Edit mode, logged in, MCP connected) and
+   tell me when it's open. I need to grab <what> (~<N> min). You can close it again after."
+3. Fetch. Library items: `python tools/fetch_library.py jobs`, then every step of `library/jobs/JOBS.md`. A new model: MCP
+   `search_asset` for it (free models), pick ONE model that fits (blocky Roblox look, a single creature or object, not a whole
+   map, no scripts needed, a size you can scale), create the Folder `workspace.SetImport` if missing, `insert_asset` it there as
+   `imp_<id>`, `execute_luau` the code of `tools/rbx_set_export.luau`, then `tools/rbx_set_meshes.luau` with ID = "<id>" and
+   FROM/TO = 1/40, 41/80, ... until nothing is left (DESTROY = true on the last call), then
+   `python tools/rbx_set_import.py fetch <id> <slug>`. The story uses it as `"kind": "rbx:<slug>"`; it stays for later stories.
+   Draft one still and look at it; a model that looks wrong (broken meshes, wrong scale, not what was asked) is not used.
+4. Refused, nothing fits, or the user does not want to open Studio: fall back (a part-built creature, a stand-in animation,
+   another hair or set) and say so in one line.
+5. When done: "Got it. You can close Roblox Studio again."
 
 ## 2a. Pick a format
 If the user names a format ("a POV", "in this world...", "rich vs poor") or gives no format, read `FORMATS.md` and pick one
@@ -58,7 +80,7 @@ No Blotato account yet? Sign-up link: https://blotato.com/?ref=nocodehack . Foll
 Read `WRITER_GUIDE.md` (how to write a story), `DIRECTING.md` (how to direct it: structure, camera, acting timing) and
 `short.schema.md` (every key) before writing. Plan the intensity curve (DIRECTING rule 1) before the first beat.
 Use the Roblox libraries for every character (`lib:` hair, faces and clothes; tags are in `library/manifest/*/`).
-Working examples: `stories/pro_bad_grade`, `stories/pro_complex_fight`, the Dragon Ball Z parody `stories/parody_dbz_fight`
+Working examples: `stories/pro_bad_grade`, `stories/pro_complex_fight`, `stories/dragon_in_the_park` (a creature), the Dragon Ball Z parody `stories/parody_dbz_fight`
 (and `parody_dbz_fight_slower`, the same story changed by one sentence), and one `stories/fmt_*` per format. Then:
 1. Write `stories/<name>/story.json` (2-4 scenes, 15-60 s total; under 30 s performs best) from the user's idea and format (2a).
 2. `python tools/story_lint.py stories/<name>/story.json` - fix every ERROR, read every WARN.
@@ -81,9 +103,10 @@ The camera cuts on actions: a story with few beats gets few shots. Before step 2
   an extreme close-up on the strongest one), a physical gag (fall, jump, run, knockback) when the idea allows it.
 - Shots: the first shot at t 0 on a character, `on` = characters only (a prop in `on` fails the face gate; the engine finds
   the prop itself). Mix sizes: wide/full for blocking, medium for talk, close for the punchline face.
-- No animals: the engine has none (no pet, dog or cat model). Tell the user in one line and write around it: the pet stays
-  hidden in a box on the floor that jolts (props `shake: [seconds]`) with a reaction cut to whoever sees it, heard not seen, or
-  a toy prop; never pass a random prop off as an animal.
+- Something the engine has no model for (a dragon, a monster, a dog, a car, a spaceship...): get it into the Short, do not write
+  around it first. Use the scene key `creatures` (short.schema.md): a model already on this PC (`rbx:<slug>` in assets/rbxsets),
+  else fetch one from the Roblox Creator Store (section 1b), else a part-built kind (`dragon` for any winged beast). Only when
+  all of that fails: say so in one line and write around it (hidden in a box that jolts with `shake`, heard not seen).
 - Entrances: start the character at the room edge or in a doorway (positions outside the room are pulled inside), then walk.
 - Faces: change `face` on every emotional turn; 4-6 different faces per character in a 30 s Short.
 - Colour: shirts must contrast with the yellow Roblox skin (no yellow/orange shirts on yellow skin); night/spooky scenes keep

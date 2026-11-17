@@ -310,6 +310,11 @@ def step_to(sc, ch, goal_xy, f_start, goal_yaw=None, step_m=0.5 * S, step_deg=35
             hp.location.z = hz0[k] + lift; hp.keyframe_insert('location', frame=f)
 
     f = f_start; pos, yaw = p0.copy(), y0
+    T_ = n * 2 * half
+    # EASED TURN (creator 2026-11-15 'character turning so robotic'): the body's yaw speeds up and slows down over the WHOLE move
+    # (30 % linear + 70 % smoothstep) instead of a constant spin; feet keep their plan (hip twist absorbs the small difference)
+    ease = (lambda g: y0 + dyaw * (lambda u: .3 * u + .7 * u * u * (3 - 2 * u))(min(1.0, max(0.0, (g - f_start) / T_))))
+    by = ease if abs(dyaw) > 0.35 else (lambda g: None)
     if key_first: key(f, pos, yaw)
     for i in range(1, n + 1):
         p1, y1 = p0.lerp(goal, i / n), y0 + dyaw * i / n
@@ -320,9 +325,9 @@ def step_to(sc, ch, goal_xy, f_start, goal_yaw=None, step_m=0.5 * S, step_deg=35
             pm, ym = (pos.lerp(p1, 0.5), yaw + (y1 - yaw) * 0.5) if idx == 0 else (p1, y1)   # halfway, then all the way
             sw[k] = ((feet[k][0].copy(), feet[k][1]), tgt[k])
             for j in range(1, half):
-                t = j / half; key(f + j, pos.lerp(pm, t), yaw + (ym - yaw) * t, swing_k=k, u=t)
+                t = j / half; yb_ = by(f + j); key(f + j, pos.lerp(pm, t), yaw + (ym - yaw) * t if yb_ is None else yb_, swing_k=k, u=t)
             feet[k] = [tgt[k][0].copy(), tgt[k][1]]; pos, yaw = pm, ym; f += half
-            if key_last or i < n or idx == 0: key(f, pos, yaw)          # landed: both feet planted
+            if key_last or i < n or idx == 0: key(f, pos, yaw if by(f) is None else by(f))          # landed: both feet planted
     return f
 
 

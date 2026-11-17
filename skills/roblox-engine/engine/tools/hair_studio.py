@@ -110,7 +110,9 @@ def collect(js, pad=400):
         if not (d / 'mesh.obj').exists():
             want = (meta['verts'], meta['tris']) if meta.get('verts') else None   # manifest shape: the window also holds OTHER hairs' meshes
             ok = None
-            for _, body in sorted(meshes, key=lambda x: -len(x[1])):
+            # fresh writes in this id's window first (entries() lists them first); cache-hit bodies matched by URL come after
+            # and are shared by every window, so a global largest-first sort picked the same foreign mesh for all ids (2026-11-15)
+            for _, body in meshes:
                 try: vt = mesh_to_obj(body, d / 'mesh.obj')
                 except Exception: continue
                 if want is None or tuple(vt) == tuple(want): ok = vt; break

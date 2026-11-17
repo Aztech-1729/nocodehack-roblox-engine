@@ -4,7 +4,7 @@ Use in a story cast: `"hair_style": "lib:<tag>"` (e.g. `lib:goku1`) or `lib:<ass
 
 Tags: goku1-4, vegeta1-4, super_saiyan1-4, spiky_anime1, spiky_messy1-2, spiky_tall1, spiky_villain1, side_swept1,
 fluffy_fringe1, short_anime1, emo1/2/4, long_straight1/3/4, ponytail1-4, messy_bun1-4, curly2, afro1-4, buzz_cut3-4,
-pigtails1-4, wavy1-4.
+pigtails1-4, wavy1-4, curly_bun1-2 (curly bun scalp hairs), mid_fade1-2 (short fades; 2026-11-15).
 Known: fluffy_fringe1 and ponytail1 cover the eyes (style); wavy3 covers 44 % of the face.
 
 ## Add more hairs

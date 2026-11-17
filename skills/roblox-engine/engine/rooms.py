@@ -60,7 +60,7 @@ def box(name, c, size, material, parent=None):
 FLOORS = {'wood': ('planks', '#A0683A', '#8A5530', 0.9), 'checker': ('checker', '#2E3A55', '#C9CED6', 0.5),
           'tile': ('checker', '#F2F0E8', '#8FA9C9', 1.2), 'carpet': ('flat', '#7A8FB8', None, 0),
           'grass': ('flat', '#5DAA3C', None, 0), 'asphalt': ('flat', '#4A4D52', None, 0),
-          'sand': ('flat', '#D6BC90', None, 0)}   # R-look2: paler sand (was #C9A46A) so the cast separates
+          'sand': ('flat', '#D6BC90', None, 0), 'plaza': ('checker', '#F2DDBB', '#E3C59E', 0.6)}   # plaza: warm promenade paving (vice)   # R-look2: paler sand (was #C9A46A) so the cast separates
 
 PRESETS = {'living_room': {'size': [30, 24],
                  'height': 11,
@@ -217,6 +217,7 @@ PRESETS = {'living_room': {'size': [30, 24],
  'forest': {'outdoor': True, 'size': [70, 60], 'floor': 'grass', 'time': 'day', 'forest': True},
  'city': {'outdoor': True, 'size': [80, 70], 'floor': 'asphalt', 'time': 'day', 'city': True},
  'street': {'outdoor': True, 'size': [80, 70], 'floor': 'grass', 'time': 'day'},
+ 'vice': {'outdoor': True, 'size': [80, 70], 'floor': 'plaza', 'time': 'day', 'vice': True},   # GTA-style beach town: pastel blocks + palms (2026-11-16)
  'park': {'outdoor': True, 'size': [70, 60], 'floor': 'grass', 'time': 'day', 'park': True},
  'wasteland': {'outdoor': True, 'size': [80, 70], 'floor': 'sand', 'time': 'day', 'wasteland': True}}
 
@@ -421,6 +422,33 @@ def exterior(sp):
         for x in (-20, 0, 20):
             assets.place('city-kit-roads/light-square', (x, 6.5), rot=180)
             q = assets.PLACED[-1]; lamps.append(((q['rect'][0] + q['rect'][1]) / 2, (q['rect'][2] + q['rect'][3]) / 2, q['top'] - 0.3))
+    elif sp.get('vice'):   # Vice City feel (2026-11-16): the suburban street layout with PASTEL buildings, palm rows,
+        # sports cars and a pink-and-teal kerb; cameras live in y -6..-26 (kept clear exactly like the suburban street)
+        box('road', (0, 11 * S, 0.01), ((W + 200) * S, 12 * S, 0.02), mat('road asphalt', '#3E4146', 0.8))
+        for x in range(-60, 61, 8):
+            box('lane mark', (x * S, 11 * S, 0.025), (4 * S, 0.4 * S, 0.01), mat('lane paint yellow', '#F2C94C', 0.6))
+        box('sidewalk', (0, 3 * S, 0.06), ((W + 200) * S, 4 * S, 0.12), mat('sidewalk warm', '#E6D9C8', 0.8))
+        box('sidewalk far', (0, 19 * S, 0.06), ((W + 200) * S, 4 * S, 0.12), mat('sidewalk warm', '#E6D9C8', 0.8))
+        box('curb', (0, 5.1 * S, 0.09), ((W + 200) * S, 0.3 * S, 0.18), mat('curb pink', '#E79BB5', 0.7))
+        box('curb far', (0, 16.9 * S, 0.09), ((W + 200) * S, 0.3 * S, 0.18), mat('curb teal', '#5CC8C0', 0.7))
+        pastel = ['#FFB3C7', '#9EE6D8', '#FFD59E', '#B9C8FF', '#FFC2A8', '#C8F0A8']
+        types = 'abcdefghijklmn'; cars = ['car-kit/hatchback-sports', 'car-kit/sedan-sports', 'car-kit/taxi', 'car-kit/suv', 'car-kit/police']
+        for i, x in enumerate(range(-48, 49, 16)):            # far side: pastel shop blocks + a palm between each
+            tint(assets.place(f'city-kit-commercial/building-{types[(i * 5 + 2) % 14]}', (x, 29), rot=180, scale=1.15, label=f'house {i}'), pastel[i % 6])
+            assets.place('nature-kit/tree_palmTall' if i % 2 else 'nature-kit/tree_palmDetailedTall', (x + 8, 21.6), scale=2.2, rot=rng.uniform(0, 360), solid=False)
+        for i, x in enumerate(range(-40, 41, 16)):            # near side (reverse angles), kept BEHIND the camera zone
+            tint(assets.place(f'city-kit-suburban/building-type-{"abcdefghijklmnopqrstu"[(i * 7 + 4) % 21]}', (x, -38), scale=1.5, label=f'house front {i}'), pastel[(i + 3) % 6])
+            assets.place('nature-kit/tree_palmShort', (x + 6, -28), scale=2.0, rot=rng.uniform(0, 360), solid=False)
+        for i, x in enumerate((-30, -12, 20, 38)):            # parked cars both kerbs
+            assets.place(cars[i % len(cars)], (x, 7.5 if i % 2 else 14.5), rot=90 if i % 2 else -90, label=f'car {i}')
+        lamps = []
+        for x in (-26, 26):   # flanks only: a lamp at x 4 stood between the lens and the cast (gun test shot 2026-11-16)
+            assets.place('retro-urban-kit/detail-light-single', (x, 1.5), rot=180)
+            q = assets.PLACED[-1]; lamps.append(((q['rect'][0] + q['rect'][1]) / 2, (q['rect'][2] + q['rect'][3]) / 2 - 0.4, q['top'] - 0.25))
+            assets.place('nature-kit/tree_palmBend', (x + (9 if x < 0 else -9), 1.2), scale=1.9, rot=rng.uniform(0, 360))
+        for i in range(24):
+            assets.place(rng.choice(['flower_redA', 'flower_yellowA', 'flower_purpleA']),
+                         (rng.uniform(-W / 2, W / 2), rng.uniform(-34, -28) if i % 2 else rng.uniform(21, 25)), solid=False, scale=1.0)
     elif sp.get('park'):
         box('path', (0, 0, 0.02), (6 * S, (D + 40) * S, 0.04), mat('park path', '#D9C29A', 0.9))
         for i in range(14):
@@ -464,6 +492,29 @@ def exterior(sp):
                          (rng.uniform(-W / 2, W / 2), rng.uniform(-34, -28) if i % 2 else rng.uniform(21, 27)), solid=False, scale=1.0)
     return {'bounds': (-W / 2 * S, W / 2 * S, -D / 2 * S, D / 2 * S), 'windows': {}, 'H': 60, 'W': W, 'D': D, 'outdoor': True,
             'lamps': locals().get('lamps', [])}
+
+
+def tint(piv, hex_col, k=.65):
+    """Pastel-tint one placed model: its meshes get per-OBJECT copies of their materials whose base colour is multiplied by hex_col
+    (k = strength); the shared kit materials stay untouched. Returns the pivot."""
+    from rig import lin
+    rgb = lin(hex_col); cache = {}
+    for c in [o for o in piv.children_recursive if o.type == 'MESH']:
+        for slot in c.material_slots:
+            m = slot.material
+            if m is None or not m.use_nodes: continue
+            if m.name not in cache:
+                m2 = m.copy(); m2.name = f'{m.name} tint {hex_col}'; nt = m2.node_tree; bs = nt.nodes.get('Principled BSDF')
+                if bs is not None:
+                    inp = bs.inputs['Base Color']
+                    if inp.is_linked:
+                        mx = nt.nodes.new('ShaderNodeMix'); mx.data_type = 'RGBA'; mx.blend_type = 'MULTIPLY'; mx.inputs['Factor'].default_value = k
+                        nt.links.new(inp.links[0].from_socket, mx.inputs[6]); mx.inputs[7].default_value = (*rgb, 1); nt.links.new(mx.outputs[2], inp)
+                    else:
+                        inp.default_value = tuple(a * (1 - k + k * t) for a, t in zip(inp.default_value[:3], rgb)) + (1,)
+                cache[m.name] = m2
+            slot.link = 'OBJECT'; slot.material = cache[m.name]
+    return piv
 
 
 def lockers(d, W, D):

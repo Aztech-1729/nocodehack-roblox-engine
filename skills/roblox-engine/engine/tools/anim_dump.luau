@@ -43,7 +43,9 @@ for _, j in ipairs(JOBS) do
     table.sort(kf, function(a, b) return a.t < b.t end)
     out[j.slug] = {id = tonumber(j.id), name = j.name, loop = ks.Loop, pri = ks.Priority.Name, kf = kf}
   else
-    out[j.slug] = {id = tonumber(j.id), name = j.name, err = tostring(ks)}
+    local e = tostring(ks); local l = e:lower()   -- Roblox answers "no permission" / "not authorized" for clips this account may not load
+    local refused = l:find("permission") or l:find("authoriz") or l:find("denied") or l:find("403") or l:find("401")
+    out[j.slug] = {id = tonumber(j.id), name = j.name, err = e, refused = refused ~= nil}
   end
 end
 local s = HS:JSONEncode(out)

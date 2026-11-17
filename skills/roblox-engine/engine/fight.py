@@ -34,6 +34,10 @@ MOVES = {
     'power_up': {'R': (18, 32), 'L': (18, 32), 'head': (-18, 0, 0), 'body': (-8, 0, 0)},
     'fly_pose': {'R': (155, 8), 'L': (155, 8), 'legR': (-22, 5), 'legL': (-28, 5), 'body': (22, 0, 0)},
 }
+# HIT SIDES (overnight 2026-11-16 'enhance fighting'): a left punch snaps the head the OTHER way (mirror: arms swap, yaw/roll flip),
+# an uppercut throws the head and chest back; alternating punches now read as alternating impacts
+MOVES['hit_head_L'] = {'R': MOVES['hit_head']['L'], 'L': MOVES['hit_head']['R'], **{k: (v[0], -v[1], -v[2]) for k, v in MOVES['hit_head'].items() if k in ('head', 'body')}}
+MOVES['hit_up'] = {'R': (35, 45), 'L': (35, 45), 'head': (-38, 0, 6), 'body': (-20, 0, 0)}
 poses.LIB.update(MOVES)
 FACE = faces.set   # story builds route faces through their face schedule instead (story_beat)
 
@@ -322,30 +326,29 @@ def attack(sc, attacker, target, move, frame, log, blocked=False, catch_hand=Non
     _pose(attacker, MOVES[move], frame, legs=False)
     _pose(attacker, FIGHT_STANCE, frame + 6, legs=False)
 
-    # A seated/lying target is still struck, but keeps every one of its authored animation keys.
-    reaction = 'hit_body' if foot else 'hit_head'
-    if target_standing:
-        if tap:   # a flick of the head, nothing more
-            poses.beat(sc, target, TAP_HIT, frame + 2, move=2, antic=0, over=0, settle=0)   # leaning back with the tap also clears the arm
-            poses.beat(sc, target, {'head': (0, 0, 0), 'body': (0, 0, 0)}, frame + 12, move=7, antic=0, over=0, settle=0)
-        elif not blocked:
-            poses.beat(sc, target, MOVES[reaction], frame + 2, move=2, antic=0, over=0, settle=0)
-            poses.beat(sc, target, FIGHT_STANCE, frame + 8, move=4, antic=0, over=0, settle=0)
-        _at(sc, frame)
-        target_base = target.root.location.copy()
-        direction = _direction(target_base - base)
-        # STAGGER STEP back (planted feet), not a root shove: the 0.22 m push in 4 frames dragged the soles 11 cm (Goku vs
-        # Vegeta s02, R169). A knockback that starts on this hit simply overrides the root from its own frame.
-        # A target hit mid-walk stops walking: its later root/leg keys fought the stagger (Dave 7 cm, t_fight_glide).
-        lo._hold(target, frame - 1); _at(sc, frame); lo._hold(target, frame)
-        lo.clear_keys([target.root] + list(target.hips), frame + 1)
-        g_ = target_base + direction * .22
-        if not (blocked or tap):   # a stopped strike or a tap does not push the defender
-            lo.step_to(sc, target, (g_.x, g_.y), frame, frames_per_step=4)
-            FACE(target.name, 'angry' if foot else 'scream', frame)
-            FACE(target.name, 'angry', frame + 8)
-        elif tap:
-            FACE(target.name, 'o', frame)
+    # Reaction starts at contact so the target cannot recoil before the fist arrives.
+    reaction = 'hit_body' if foot else 'hit_up' if move == 'uppercut_R' else 'hit_head_L' if move == 'punch_L' else 'hit_head'
+    if tap:   # a flick of the head, nothing more
+        poses.beat(sc, target, TAP_HIT, frame + 2, move=2, antic=0, over=0, settle=0)   # leaning back with the tap also clears the arm
+        poses.beat(sc, target, {'head': (0, 0, 0), 'body': (0, 0, 0)}, frame + 12, move=7, antic=0, over=0, settle=0)
+    elif not blocked:
+        poses.beat(sc, target, MOVES[reaction], frame + 2, move=2, antic=0, over=0, settle=0)
+        poses.beat(sc, target, FIGHT_STANCE, frame + 8, move=4, antic=0, over=0, settle=0)
+    _at(sc, frame)
+    target_base = target.root.location.copy()
+    direction = _direction(target_base - base)
+    # STAGGER STEP back (planted feet), not a root shove: the 0.22 m push in 4 frames dragged the soles 11 cm (Goku vs
+    # Vegeta s02, R169). A knockback that starts on this hit simply overrides the root from its own frame.
+    # A target hit mid-walk stops walking: its later root/leg keys fought the stagger (Dave 7 cm, t_fight_glide).
+    lo._hold(target, frame - 1); _at(sc, frame); lo._hold(target, frame)
+    lo.clear_keys([target.root] + list(target.hips), frame + 1)
+    g_ = target_base + direction * .22
+    if not (blocked or tap):   # a stopped strike or a tap does not push the defender
+        lo.step_to(sc, target, (g_.x, g_.y), frame, frames_per_step=4)
+        FACE(target.name, 'angry' if foot else 'scream', frame)
+        FACE(target.name, 'angry', frame + 8)
+    elif tap:
+        FACE(target.name, 'o', frame)
 
     # Contact belongs to the distal limb VOLUME, rather than a point buried inside the fist.
     limb = interact.limb_mesh(pivot)
@@ -667,6 +670,7 @@ def land(sc, ch, frame):
 
 
 # ---------------- story-file glue (short.schema.md section 6, fight keys) ----------------
+STYLE = {}   # build.py sets it per scene: {'blood': bool, 'bruises': bool} (story/scene keys); '_n' counts bruises per target
 FIGHT_KEYS = ('attack', 'block', 'dodge', 'knockback', 'fly', 'land', 'power_up', 'aura', 'beam', 'exclaim', 'transform', 'down')
 
 
@@ -798,8 +802,9 @@ def story_beat(sc, b, ch, f, fps, cast, face_sched, fallen, settle, vfx_jobs, lo
                     log.setdefault('impact_frames', []).append(fr_)   # a camera shake tick per stop
                     vfx_jobs.append(lambda fr0=fr_: vfx.dust_burst(sc, _ground(ch, sc, fr0), fr0, .45))   # a small puff at his feet
                     if i_ < n_ - 1: fr_ += gaps[i_]
-                col_ = a.get('aura', '#5AC8FF')
-                vfx_jobs.append(lambda: vfx.aura(sc, ch, first_fr + (fr_ - first_fr) // 2, fr_ + 8, col_))   # his aura flares as he gets desperate
+                if a.get('aura'):   # opt-in (anime fights): "aura": true or "#hex". A street brawl has none (creator 2026-11-15 'this is not dbz')
+                    col_ = a['aura'] if isinstance(a['aura'], str) else '#5AC8FF'
+                    vfx_jobs.append(lambda: vfx.aura(sc, ch, first_fr + (fr_ - first_fr) // 2, fr_ + 8, col_))
                 settle[who] = max(settle.get(who, 0), fr_ + 12); return
             sc.frame_set(f - 13); gap = (ch.root.matrix_world.translation - tgt.root.matrix_world.translation).xy.length / S
             if gap > GUARD + 3: err(f'attack: {tgt.name} is {gap:.1f} studs away (> {GUARD + 3:.1f}); walk/fly closer first')
@@ -813,6 +818,12 @@ def story_beat(sc, b, ch, f, fps, cast, face_sched, fallen, settle, vfx_jobs, lo
             if not quiet: log.setdefault('impact_frames', []).append(f)
             p = r['contact_point'].copy(); col3 = '#FFFFFF' if blk else a.get('color', '#FFF6B0')
             vfx_jobs.append(lambda: vfx.impact_flash(sc, p, f, col3, size=.4 if quiet else 1.0))
+            if not quiet and STYLE.get('blood'): vfx_jobs.append(lambda: vfx.blood(sc, p, f + 1, 1.2 if a['move'] == 'uppercut_R' else .8, seed=f))
+            if not quiet and STYLE.get('bruises') and a['move'] != 'kick_R':   # 'blue marks': each landed head strike adds the next bruise
+                import faces
+                n_b = STYLE.setdefault('_n', {}).get(tgt.name, 0); STYLE['_n'][tgt.name] = n_b + 1
+                mk_ = ([faces.BRUISE_ORDER[n_b]] if n_b < len(faces.BRUISE_ORDER) else []) + (['blood_mouth'] if STYLE.get('blood') and n_b == 2 else [])
+                if mk_: faces.add_marks(tgt.name, mk_, f + 2)
             settle[who] = r['end']; settle[tgt.name] = max(settle.get(tgt.name, 0), f + 8)
             if a.get('relax'):   # after the last strike of a series: arms come down, fists low
                 poses.beat(sc, ch, LOW_ARMS, r['end'] + 8, move=10, over=0, settle=0); settle[who] = r['end'] + 8
@@ -880,7 +891,7 @@ def story_beat(sc, b, ch, f, fps, cast, face_sched, fallen, settle, vfx_jobs, lo
                 log.setdefault('curled', {})[who] = side_
                 bc_ = body_center(sc, ch, end); log.setdefault('notes', []).append(f"t{b['t']} {who} lands curled, body centre {bc_.x / S:.1f},{bc_.y / S:.1f} studs")
                 vfx_jobs.append(lambda: vfx.crater(sc, body_center(sc, ch, end), end, radius=CURL_CRATER, big=True))
-            elif k.get('height', 2) >= 1.5 or dist >= 6:   # a real blast: the landing leaves a CRATER (DBZ ground damage, R172)
+            elif k.get('crater', True) and (k.get('height', 2) >= 1.5 or dist >= 6):   # a real blast ("crater": false = street brawl, dust only): the landing leaves a CRATER (DBZ ground damage, R172)
                 vfx_jobs.append(lambda: vfx.crater(sc, _ground(ch, sc, end), end))
             else:
                 vfx_jobs.append(lambda: vfx.dust_burst(sc, _ground(ch, sc, end), end))

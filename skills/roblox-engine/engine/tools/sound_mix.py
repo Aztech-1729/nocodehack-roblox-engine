@@ -91,7 +91,7 @@ def extract_events(story, sdir, seed=1):
         SCENE_OFFS.append(off)
         pos = {c['name']: tuple(c['at']) for c in sc.get('cast', []) if 'at' in c}
         for c in sc.get('cast', []): face.setdefault(c['name'], c.get('face', 'smile')); face[c['name']] = c.get('face', face[c['name']])
-        floor = {'park': 'grass', 'street': 'grass', 'wasteland': 'concrete'}.get(sc.get('set', {}).get('preset', ''), 'wood')
+        floor = {'park': 'grass', 'street': 'grass', 'vice': 'concrete', 'city': 'concrete', 'wasteland': 'concrete'}.get(sc.get('set', {}).get('preset', ''), 'wood')
         # scene cut transition
         if si: add(off - 0.1, 'whoosh', '', 0.55)
         spans = walk_spans(beats, rep, pos, fps)
@@ -127,6 +127,9 @@ def extract_events(story, sdir, seed=1):
                     n_ = len(fl_); tot_ = float(b['attack'].get('s') or .3 * (n_ - 1)); w_ = [1.4 - i_ / max(1, n_ - 2) * .8 for i_ in range(n_ - 1)] if n_ > 2 else [1.0]; tt_ = t
                     for x_ in w_: tt_ += max(4 / fps, tot_ * x_ / sum(w_)); add(off + tt_, 'punch', w, 0.85)
                 if blk: add(off + t, 'block', w, 0.6)
+            if 'shoot' in b:   # same shot frames as build.py: t + 2 frames, then every max(3, round(every * fps)) frames
+                sp_ = b['shoot'] if isinstance(b['shoot'], dict) else {}; ev_ = max(3, round(float(sp_.get('every', .25)) * fps))
+                for i_ in range(max(1, int(sp_.get('shots', 1)))): add(off + t + (2 + i_ * ev_) / fps, 'gunshot', w, 1.0)
             if b.get('block'): add(off + t, 'block', w, 0.7)
             if 'dodge' in b: add(off + t - 0.1, 'whoosh', w, 0.5)
             if 'fly' in b: add(off + t, 'dash', w, 0.7)
@@ -310,7 +313,7 @@ def ass(talks, path, story=None):
         if i + 1 < len(cards): t1 = min(t1, cards[i + 1][0])
         if t1 - t0 < (0.08 if st == 'Word' else 0.2): continue   # a cut-off card flashing for a few frames reads as a glitch
         lines.append(f"Dialogue: 0,{ts(t0)},{ts(t1)},{st},,0,0,0,,{{\\fad(40,0)\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)}}{c}")
-    if story.get('header') or story.get('cards') or FREEZES: lines += overlays.extra_events(story, SCENE_OFFS, FREEZES)
+    if story.get('header') or story.get('cards') or story.get('hud') or FREEZES: lines += overlays.extra_events(story, SCENE_OFFS, FREEZES)
     with open(path, 'w', encoding='utf-8') as f_: f_.write(h + '\n'.join(lines) + '\n')
     return len(lines)
 
@@ -346,7 +349,7 @@ def run(story_path, video=None, out=None, mood=None, voice=True, music=True, see
         cmd = ['ffmpeg', '-v', 'error', '-y', '-i', os.path.abspath(video), '-i', os.path.abspath(wav)]; vf = []
         with tempfile.TemporaryDirectory() as td:
             g = overlays.video_graph(story, SCENE_OFFS, FREEZES, probe_fps(video), *probe_size(video)); mp = '0:v'
-            if any(t['text'] for t in talks) or story.get('header') or story.get('cards') or FREEZES:
+            if any(t['text'] for t in talks) or story.get('header') or story.get('cards') or story.get('hud') or FREEZES:
                 ass(talks, os.path.join(td, 'c.ass'), story); vf = ['-vf', "ass=c.ass"]
             if g:   # split / freeze graph first, then the captions burn on its output
                 vf = ['-filter_complex', g + (';[v]ass=c.ass[w]' if vf else '')]; mp = '[w]' if vf[1].endswith('[w]') else '[v]'
