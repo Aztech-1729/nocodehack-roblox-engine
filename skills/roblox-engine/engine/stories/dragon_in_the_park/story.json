@@ -119,13 +119,13 @@
           "t": 1.4,
           "who": "Mia",
           "look": "Dragon",
-          "face": "shock"
+          "face": "o"
         },
         {
           "t": 1.6,
           "who": "Sam",
           "look": "Dragon",
-          "face": "shock"
+          "face": "o"
         },
         {
           "t": 2.0,
