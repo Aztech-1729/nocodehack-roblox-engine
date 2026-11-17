@@ -26,6 +26,8 @@ Thanks to @Aztech-1729 for a second careful audit of the fight engine ([PR #2](h
 
 ## 1.13.0 · 2026-11-17
 
+<img src="docs/img/changelog/1.13.0_creatures.jpg" width="800">
+
 ### Added
 - Creatures and custom models in stories: a scene can include a dragon, a monster or any other model. It is placed and
   filmed by name, so characters can look at it, react to it and run from it, and the camera frames the whole creature.
