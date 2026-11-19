@@ -34,13 +34,6 @@ def scene_timeline(sc, rep, fps):
         for s in shots:
             if s['t'] > t0 + 1e-6: s['t'] = round(s['t'] + dl, 3)
             elif s['t'] > t0 - 1e-6: s['t'] = round(s['t'] + max(0.0, dl - 0.6), 3)
-        if i0 is None: return
-        beats[i0]['_own'] = dl
-        for b in beats[i0 + 1:]:
-            if b['t'] >= t0: b['t'] = round(b['t'] + dl, 3)
-        for s in shots:
-            if s['t'] > t0 + 1e-6: s['t'] = round(s['t'] + dl, 3)
-            elif s['t'] > t0 - 1e-6: s['t'] = round(s['t'] + max(0.0, dl - 0.6), 3)
     def settle_wait(t0, who, dl):
         b = next((b for b in beats if b.get('who') == who and abs(b['_t0'] - t0) < 0.011 and '_wait' not in b), None)
         if b: b['_wait'] = dl
@@ -342,12 +335,11 @@ VIDEOS = ('hq.mp4', 'mid.mp4', 'preview.mp4', 'draft.mp4')   # default video: th
 
 
 def probe_fps(video):
-    out = subprocess.run(['ffprobe', '-v', 'error', '-select_streams', 'v', '-show_entries', 'stream=r_frame_rate', '-of', 'csv=p=0', video],
-                         capture_output=True, text=True).stdout.strip().partition('/')
-    n, d = out[0], out[2]
-    try: return float(n) / float(d or 1)
-    except (ValueError, ZeroDivisionError): return 24.0   # a wav-only run or a missing stream: the default fps, not a traceback
-    return float(n) / float(d or 1)
+    try:
+        n, _, d = subprocess.run(['ffprobe', '-v', 'error', '-select_streams', 'v', '-show_entries', 'stream=r_frame_rate', '-of', 'csv=p=0', video],
+                                 capture_output=True, text=True).stdout.strip().partition('/')
+        return float(n) / float(d or 1)
+    except (ValueError, ZeroDivisionError, OSError): return 24.0   # no ffprobe, a wav-only run or a missing stream: the default fps
 
 
 def probe_size(video):

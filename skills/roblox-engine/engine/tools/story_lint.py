@@ -20,7 +20,7 @@ SET = {'preset', 'size', 'height', 'wall', 'trim', 'floor', 'floor_color', 'door
 LOOKS = {'name', 'shirt', 'pants', 'skin', 'hair', 'hair_style', 'face', 'face_family', 'face_marks', 'outfit', 'accessories'}
 SCAST = LOOKS | {'at', 'yaw'}
 PROP = {'name', 'kind', 'on', 'at', 'z', 'rot', 'held_by', 'hand', 'until', 'shake'}
-CREATURE = {'name', 'kind', 'at', 'z', 'yaw', 'scale', 'color', 'belly', 'wing', 'path', 'flap', 'hover', 'roar', 'moves', 'sit', 'pounce', 'heavy'}
+CREATURE = {'name', 'kind', 'at', 'z', 'yaw', 'scale', 'color', 'belly', 'wing', 'path', 'flap', 'hover', 'roar', 'moves', 'sit', 'pounce', 'heavy', 'look', 'attack', 'hit', 'startle', 'die'}
 BEAT = {'t', 'who', 'walk', 'speed', 'run', 'stride', 'hand', 'sit', 'stand', 'fall', 'get_up', 'give', 'throw', 'turn', 'pose', 'jump',
         'wiggle', 'wiggle_s', 'anim', 'loop', 'anim_speed', 'anim_skip', 'face', 'talk', 'gesture', 'look', 'track', 'grab', 'move',
         'attack', 'block', 'dodge', 'knockback', 'down', 'fly', 'land', 'power_up', 'aura', 'aura_color', 'beam', 'exclaim', 'transform',
@@ -499,7 +499,7 @@ def lint_scene(R, L, S, sc, si, looks, sdir, fps):
     if 'mood' in st and st['mood'] not in LIGHT_MOODS:
         R.err(W + ' set', 'mood', f"light mood '{st['mood']}' unknown -> one of {sorted(LIGHT_MOODS)} (music loops go in the story/scene key, not set.mood)")
     if 'weather' in st and str(st['weather']).lower() not in ('none', 'snow', 'rain'):
-        R.warn(W + ' set', 'weather', f"'{st['weather']}' -> none, snow or rain (anything else reads as clear sky)")
+        R.err(W + ' set', 'weather', f"'{st['weather']}' -> none, snow or rain")
     if 'music' in sc and sc['music'] not in L.music: R.err(W, 'music', f"music loop '{sc['music']}' does not exist -> one of {sorted(L.music)}{near(sc['music'], L.music)}")
     pinfo = L.presets.get(preset, {'size': [28, 24], 'outdoor': False} if preset == 'room' else {'size': None, 'outdoor': False})
     size = st.get('size', pinfo['size']) if preset not in ('rbx', 'classroom') else None
@@ -584,6 +584,23 @@ def lint_scene(R, L, S, sc, si, looks, sdir, fps):
         if c.get('sit') is not None and not (isinstance(c['sit'], list) and len(c['sit']) == 2 and all(num(x) for x in c['sit']) and c['sit'][0] < c['sit'][1]):
             R.err(w, 'sit', '-> [from, to] seconds')
         if c.get('pounce') is not None and not (isinstance(c['pounce'], list) and all(num(x) for x in c['pounce'])): R.err(w, 'pounce', '-> [seconds, ...]')
+        for a in ('attack', 'startle', 'hit'):
+            v = c.get(a)
+            if v is not None and not (isinstance(v, list) and all(num(x) or (a == 'hit' and isinstance(x, list) and len(x) == 2 and num(x[0]) and x[1] in (-1, 0, 1)) for x in v)):
+                R.err(w, a, '-> [seconds, ...]' + (' (or [seconds, side] with side -1 left / 1 right)' if a == 'hit' else ''))
+        if c.get('die') is not None and not num(c['die']): R.err(w, 'die', '-> seconds (the creature falls and stays down)')
+        elif c.get('die') is not None and any(isinstance(p, dict) and num(p.get('t')) and p['t'] > c['die'] for p in c.get('path') or []):
+            R.warn(w, 'die', f"path keeps moving after die at {c['die']} s: the body would slide along the ground -> end the path by then")
+        if k.startswith('rbx:') and any(c.get(a) is not None for a in ('attack', 'hit', 'startle', 'die')):
+            R.warn(w, 'attack', 'attack / hit / startle / die need a part-built creature: ignored on a Creator Store model')
+        lk = c.get('look')
+        if lk is not None:
+            items = [[0, lk]] if isinstance(lk, str) else lk
+            if not (isinstance(items, list) and all(isinstance(e, list) and len(e) == 2 and num(e[0]) for e in items)):
+                R.err(w, 'look', '-> a cast name, or [[seconds, "Name" or null], ...] (null = watch whoever talks or moves)')
+            else:
+                for e in items:
+                    if e[1] is not None and e[1] not in cast: R.err(w, 'look', f"'{e[1]}' is not in this scene's cast{near(str(e[1]), cast)}")
         for j, p in enumerate(c.get('path') or []):
             if not (isinstance(p, dict) and num(p.get('t')) and is_xy(p.get('at'))): R.err(w, 'path', f'path[{j}] -> {{"t": seconds, "at": [x, y], "z": height}}')
     def prop_xy(n):

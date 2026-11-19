@@ -1109,7 +1109,7 @@ def build(spec, log):
                 px_, py_ = c_.get('at', [0, 0]); pz_ = 0
             bpy.context.view_layer.update()
             pts_ = [o.matrix_world @ Vector(cc) for o in ms_ for cc in o.bound_box]
-            if pts_:
+            if pts_ and pz_ <= 0:   # still flying at its last path point: nothing on the ground to walk round
                 import assets as _assets
                 dx_, dy_ = (px_ * S - root_.location.x, py_ * S - root_.location.y) if c_.get('path') else (0.0, 0.0)
                 x0_, x1_ = min(p_.x for p_ in pts_) + dx_, max(p_.x for p_ in pts_) + dx_
@@ -2200,7 +2200,6 @@ def build(spec, log):
                 if tw_:
                     lo._hold(tch_, f - 1); lo._hold(tch_, f); lo.clear_keys([tch_.root] + list(tch_.hips) + list(tch_.arms_piv) + [tch_.upper], f + 1, tw_[1])
                 gun_ = guns.make_pistol(f"{b['who']} pistol {f}"); guns.hold(ch, gun_, side_); gun_.scale = (1.5, 1.5, 1.5)   # Roblox tool size (~0.8 stud)
-                prop_meshes += [o for o in gun_.children_recursive if o.type == 'MESH'] or ([gun_] if gun_.type == 'MESH' else [])   # the barrel joins the gates
                 guns.show(gun_, f - 8, shots_[-1] + 14); guns.aim(sc, ch, tp_, f, shots_[-1] + 6, side_)
                 for fs_ in shots_:
                     def shot_job(fs_=fs_, g_=gun_, tp_=tp_, ch_=ch, side_=side_):   # a vfx job returns the objects it made (renamed 'VFX ...')
@@ -2286,39 +2285,30 @@ def build(spec, log):
         if 'grab' in b:
             g = b['grab']; hand = g.get('hand', 'R'); side = rig.SIDE[hand]; piv = ch.arm[hand]
             pr = props[g['prop']]
-            fg0_ = max(f, settle.get(b['who'], 0))
-            held_ = next((e_ for e_ in grabs if e_[2] is pr and e_[3] <= fg0_ and (e_[4] >= fg0_ or e_[4] == END)), None)
-            if held_ is not None:   # a second grab of a held prop duplicated the grabs entry: the bake then re-keyed the prop
-                if held_[0] is piv:  # under a new window and gr.grab's release assert killed the whole build
-                    log.setdefault('notes', []).append(f"t{b['t']} {b['who']} grab {g['prop']}: already holding it -> hold kept")
+            sc.frame_set(f); bpy.context.view_layer.update()
+            c, rad, top = prop_cyl(pr)
+            fg = max(f, settle.get(b['who'], 0))
+            for attempt in (0, 1):
+                lean = lean_for.pop(b['who'], 0)
+                nxt = next((x for x in beats if x['who'] == b['who'] and x['t'] > b['t'] and 'pose' in x), None)
+                lift = nxt is None or F(nxt['t'] - b['t'], fps) > F(.5, fps)
+                end, hit = grab_candidate(sc, world, ch, pr, hand, fg, lean, lift=lift, spans=log.get('sit_spans', []))
+                if end is not None:
+                    if fg > f:   # RETIME: the grab waited for the approach -> push every later beat/shot back, lengthen the scene
+                        if 'until' in g: g['until'] = round(g['until'] + (fg - f) / fps, 3)
+                        n = retime_after(b, fg - f, f"grab {g['prop']}")
+                    fu = F(g['until'], fps) if 'until' in g else n - 1
+                    fu = max(fu, fg + F(0.25, fps))   # 'until' earlier than the acquire frame (or pushed back by a retime) tripped gr.grab's assert
+                    if fu >= n - 1 - F(0.5, fps): fu = END   # releasing in the last 0.5 s = keep holding (no mid-air prop at the end)
+                    grabs.append((piv, side, pr, fg, fu))
+                    settle[b['who']] = end
+                    break
                 else:
-                    log.setdefault('errors', []).append(f"t{b['t']} {b['who']} grab {g['prop']}: another character is holding it -> give it first")
-                pr = None
-            if pr is not None:
-                sc.frame_set(f); bpy.context.view_layer.update()
-                c, rad, top = prop_cyl(pr)
-                fg = max(f, settle.get(b['who'], 0))
-                for attempt in (0, 1):
-                    lean = lean_for.pop(b['who'], 0)
-                    nxt = next((x for x in beats if x['who'] == b['who'] and x['t'] > b['t'] and 'pose' in x), None)
-                    lift = nxt is None or F(nxt['t'] - b['t'], fps) > F(.5, fps)
-                    end, hit = grab_candidate(sc, world, ch, pr, hand, fg, lean, lift=lift, spans=log.get('sit_spans', []))
-                    if end is not None:
-                        if fg > f:   # RETIME: the grab waited for the approach -> push every later beat/shot back, lengthen the scene
-                            if 'until' in g: g['until'] = round(g['until'] + (fg - f) / fps, 3)
-                            n = retime_after(b, fg - f, f"grab {g['prop']}")
-                        fu = F(g['until'], fps) if 'until' in g else n - 1
-                        fu = max(fu, fg + F(0.25, fps))   # 'until' earlier than the acquire frame (or pushed back by a retime) tripped gr.grab's assert
-                        if fu >= n - 1 - F(0.5, fps): fu = END   # releasing in the last 0.5 s = keep holding (no mid-air prop at the end)
-                        grabs.append((piv, side, pr, fg, fu))
-                        settle[b['who']] = end
-                        break
-                    else:
-                        if attempt == 0:   # out of reach: walk to the nearest clear spot first, grab on arrival
-                            fe = walk_to(ch, b['who'], [g['prop']], fg, {'t': b['t'], 'hand': hand, 'speed': b.get('speed', 8)}, beats)
-                            if fe is not None: fg = fe; continue
-                        log.setdefault('errors', []).append(f"t{b['t']} {b['who']} grab {g['prop']} rejected: {hit}")
-                        break
+                    if attempt == 0:   # out of reach: walk to the nearest clear spot first, grab on arrival
+                        fe = walk_to(ch, b['who'], [g['prop']], fg, {'t': b['t'], 'hand': hand, 'speed': b.get('speed', 8)}, beats)
+                        if fe is not None: fg = fe; continue
+                    log.setdefault('errors', []).append(f"t{b['t']} {b['who']} grab {g['prop']} rejected: {hit}")
+                    break
     # relaxed holds: a raised arm held > 1.2 s eases ~22 % toward rest (reference holds breathe; frozen raised arms read robotic)
     held_arms = [(piv, f0_, f1_) for piv, side, pr, f0_, f1_ in grabs]
     for who, ch in cast.items():
@@ -2465,6 +2455,8 @@ def build(spec, log):
             pts.append((M_.translation.xy.copy(), e_.z))
         return any((p_[0] - pts[0][0]).length > 0.02 or abs(p_[1] - pts[0][1]) > 0.02 for p_ in pts)
 
+    if spec.get('creatures'):   # creatures NOTICE whoever talks or moves (head turns), judged on the final cast motion
+        import creatures; creatures.react(spec, cast, fps, log, sc)
     TT_['cleanup'] = round(time.time() - T0_ - sum(TT_.values()), 1)
     # ---------------- shots ----------------
     shafts_ = [o for o in bpy.data.objects if o.name.startswith('VFX lightshaft') and not o.hide_viewport]

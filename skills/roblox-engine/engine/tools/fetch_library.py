@@ -178,6 +178,7 @@ def collect_anims(files):
         except ValueError: pass
         i = t.find('{')
         if i < 0: print('FAIL', fn, 'no JSON in the saved MCP result'); continue   # (the old walrus printed the path twice, never the slug)
+        t = t[i:]; d, _ = json.JSONDecoder().raw_decode(t)
         for s, a in d.items():
             if s not in want: print('SKIP unknown', s); continue
             if a.get('refused') or re.search(r'permission|authoriz|denied|\b40[13]\b', str(a.get('err') or ''), re.I):

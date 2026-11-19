@@ -198,7 +198,7 @@ def _ring_flash_v1(sc, point, axis, frame, size=1.0, color='#FFFFFF'):
         o.rotation_euler = ax.to_track_quat('Z', 'Y').to_euler(); _life(o, frame, frame + 9); objects.append(o)
         for f, s in ((frame, r0 * size), (frame + 3, (r0 + r1) / 2 * size), (frame + 9, r1 * size * 1.15)):
             _key(o, 'location', f, point); _key(o, 'scale', f, (s, s, s * (1 if f < frame + 9 else .01)))
-    objects += impact_flash(sc, point, frame, '#FFFFFF', size=.8 * size)   # matches the v2 path (was 1.6: a 2x A/B discrepancy)
+    objects += impact_flash(sc, point, frame, '#FFFFFF', size=1.6 * size)
     return objects
 
 
@@ -505,8 +505,8 @@ def window_dust(sc, info):
 
 def weather(sc, info, kind='none'):
     """Set weather=snow|rain: sparse, shared meshes and baked linear fall, without simulation or volumes."""
-    kind = str(kind).lower()   # writers guess 'Snow'/'RAIN'; an unknown value degrades to clear sky instead of killing the build
-    if kind not in ('none', 'snow', 'rain'): return []
+    kind = str(kind).lower()   # writers guess 'Snow'/'RAIN'
+    if kind not in ('none', 'snow', 'rain'): raise ValueError('weather must be none, snow or rain')   # fail clearly (test_r257_atmosphere)
     if kind == 'none' or not info.get('outdoor'): return []
     prefix = 'VFX weather ' + kind
     existing = [o for o in sc.objects if o.name.startswith(prefix)]

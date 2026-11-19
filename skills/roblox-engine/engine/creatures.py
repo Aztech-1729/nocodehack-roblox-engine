@@ -103,7 +103,7 @@ def animate(root, c, fps, log, f_end=None):
             return zk[-1][1]
         for f in range(a, b + 1, 6):
             root.location.z = z_at(f) + 0.2 * S * math.sin(2 * math.pi * (f - a) / 24); root.keyframe_insert('location', index=2, frame=f)
-    if mv is None or (kind == 'dragon' and mv == 'flyer'): return   # the dragon's flying is keyed above; no type saved: path only
+    if mv is None: return   # no type saved: path only
     import beasts
     ends = [F(p['t']) for p in pts] + [F(x) for s in (c.get('sit') or [],) for x in s[1:2]] + [F(t) + fps for t in c.get('pounce', [])]
     f1 = max([f_end or 0, *ends]) + fps
@@ -113,11 +113,71 @@ def animate(root, c, fps, log, f_end=None):
             for t in c.get('pounce', []): own.append(beasts.pounce(root, F(t), fps))
             if c.get('sit'): beasts.sit(root, F(c['sit'][0]), F(c['sit'][1])); own.append((F(c['sit'][0]), F(c['sit'][1])))
         else: notes.append(f"{c['name']}: sit/pounce need the part-built wolf (a quadruped with legs)")
+    if any(c.get(k) is not None for k in ('attack', 'hit', 'startle', 'die')):   # one-off beats own their frames
+        if part_built:
+            import actions
+            for t in c.get('attack', []): own.append(actions.attack(root, kind, F(t)))
+            for t in c.get('startle', []): own.append(actions.startle(root, kind, F(t)))
+            for h in c.get('hit', []): t, side = (h, 0) if isinstance(h, (int, float)) else h; own.append(actions.hit(root, kind, F(t), side))
+            if c.get('die') is not None: own.append((actions.die(root, kind, F(c['die']))[0], 10 ** 9))   # dead stays dead
+        else: notes.append(f"{c['name']}: attack/hit/startle/die need a part-built creature ({', '.join(KINDS)})")
     tr = beasts.track(root, 0, f1)
     falls = [] if (c.get('heavy', kind == 'ogre') and mv == 'biped') else None
-    if not part_built: beasts.whole_model(root, beasts._find(root, c['name'] + ' body'), mv, tr, fps, falls)
+    if kind == 'dragon' and mv == 'flyer': pass   # its flying is keyed above
+    elif not part_built: beasts.whole_model(root, beasts._find(root, c['name'] + ' body'), mv, tr, fps, falls)
     elif mv in ('biped', 'quadruped', 'crawler'): beasts.gait(root, tr, fps, falls, own)
-    elif mv == 'slither': beasts.slither(root, tr, fps)
-    elif mv == 'floater': beasts.float_about(root, tr, fps)
+    elif mv == 'slither': beasts.slither(root, tr, fps, skip=own)
+    elif mv == 'floater': beasts.float_about(root, tr, fps, skip=own)
     if mv != DEFAULT.get(kind) and part_built: notes.append(f"{c['name']}: moves '{mv}' on a {kind} (built for '{DEFAULT[kind]}')")
     if falls: log.setdefault('impact_frames', []).extend(falls)   # heavy steps shake the camera that shows them
+    if part_built: beasts.idle_life(root, kind, tr, fps, own + ([(F(c['flap'][0]), F(c['flap'][1]))] if c.get('flap') else []))
+
+
+def react(spec, cast, fps, log, sc, step=2):
+    """NOTICE pass, run on the FINAL cast motion (build.py, before the shots): each part-built creature's head ('<name> neck',
+    a floater turns its whole body) follows its `look` target, else whoever nearby talks or moves (closer wins a tie). A new
+    target snaps the head round fast for ~0.25 s - the noticing beat - then it tracks smoothly. Clamped to 70 deg each side."""
+    talks = {}
+    for b in spec.get('beats', []):
+        if b.get('talk') and b.get('who'): talks.setdefault(b['who'], []).append((b['t'], b['t'] + float(b['talk'])))
+    crs = [c for c in spec.get('creatures', []) if str(c.get('kind', 'dragon')) in KINDS and bpy.data.objects.get(c['name'])]
+    if not crs or not cast: return
+    heads = {c['name']: bpy.data.objects.get(c['name'] + ' neck') or bpy.data.objects.get(c['name'] + ' body') for c in crs}
+    track = {c['name']: [] for c in crs}; pos = []
+    for f in range(0, sc.frame_end + 1, step):
+        sc.frame_set(f)
+        pos.append((f, {n: tuple(ch.root.matrix_world.translation.xy / S) for n, ch in cast.items()}))
+        for c in crs:
+            h = heads[c['name']]; base = h.parent.matrix_world if h.parent else bpy.data.objects[c['name']].matrix_world
+            track[c['name']].append((tuple(h.matrix_world.translation.xy / S), base.to_euler().z))
+    for c in crs:
+        h = heads[c['name']]; looks = c.get('look'); looks = [[0, looks]] if isinstance(looks, str) else sorted(looks or [], key=lambda e: e[0])
+        cur_t, cur_s, since, ang, snap, seen = None, -9.0, 99, 0.0, 0, []
+        for i, (f, ps) in enumerate(pos):
+            t = f / fps; (hx, hy), base = track[c['name']][i]
+            if c.get('die') is not None and t >= c['die']: break   # the dead stop looking (actions.die owns the head)
+            forced = [e[1] for e in looks if e[0] <= t]
+            if forced and forced[-1] is not None: best, bs = forced[-1], 99.0
+            else:
+                sc_ = {}
+                for n, (x, y) in ps.items():   # only someone who talks or moves draws the eye; closer wins a tie
+                    d = math.hypot(x - hx, y - hy)
+                    mv_ = i and math.hypot(x - pos[i - 1][1][n][0], y - pos[i - 1][1][n][1]) > 0.05
+                    act = 3 * any(a <= t <= b_ for a, b_ in talks.get(n, [])) + 2 * bool(mv_)
+                    if d <= 45 and act: sc_[n] = act - d / 15
+                best = max(sc_, key=sc_.get) if sc_ else cur_t   # nobody active: keep watching the last one
+                bs = sc_.get(best, cur_s)
+                if cur_t in ps and best != cur_t and (since < 12 or bs < sc_.get(cur_t, -9.0) + 0.75): best, bs = cur_t, sc_.get(cur_t, cur_s)   # no flicking
+            if best != cur_t:
+                since, snap = 0, (6 if best else 0)
+                if best: seen.append(f'{t:.1f}s {best}')
+            cur_t, cur_s = best, bs; since += step
+            tgt = ps.get(best) or (bpy.data.objects[best].matrix_world.translation.xy / S if best and bpy.data.objects.get(best) else None)
+            want = 0.0
+            if tgt is not None:
+                want = math.atan2(tgt[0] - hx, -(tgt[1] - hy)) - base
+                want = max(-1.22, min(1.22, (want + math.pi) % (2 * math.pi) - math.pi))
+            rate = math.radians(12 if snap > 0 else 4) * step; snap -= step
+            ang += max(-rate, min(rate, want - ang))
+            h.rotation_euler.z = ang; h.keyframe_insert('rotation_euler', frame=f, index=2)
+        if seen: log.setdefault('notes', []).append(f"{c['name']} looks at: {', '.join(seen[:6])}")

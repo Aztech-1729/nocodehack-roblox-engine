@@ -107,7 +107,7 @@ Story rules (story.py):
 | `outdoor` | false | set by `street` and `park` |
 | `park` | false | adds the park path |
 | `dress` | (appended) | list of dress entries and row entries (below) |
-| `weather` | `none` | `none`, `snow` or `rain` (outdoor presets only; anything else reads as clear sky). Sparse falling meshes, no volumes |
+| `weather` | `none` | `none`, `snow` or `rain` (outdoor presets only; any other value is an error). Sparse falling meshes, no volumes |
 
 `windows` and `doors` `wall` values use the same names as the walls above.
 
@@ -195,6 +195,10 @@ A dragon, a monster, a robot, a car: placed and filmed like a prop, by name (sho
 | `heavy` | true for `ogre` | biped: every footfall shakes the camera that shows it |
 | `sit` | none | `[from, to]` seconds: the wolf sits (rear down, head up) |
 | `pounce` | none | list of seconds: the wolf crouches and leaps 8 studs along its facing (about 0.75 s) |
+| `attack` | none | list of seconds: wind-up, strike and recover (about 0.8 s); an ogre smashes, a dragon bites, a spider rears and slams, a ghost swoops |
+| `hit` | none | list of seconds, or `[seconds, side]` (side -1 = blow from the left, 1 = right): a flinch (0.5 s) |
+| `startle` | none | list of seconds: a jump back in fright (0.6 s) |
+| `die` | none | seconds: the creature falls on its side and stays down (a ghost fades, a snake goes limp); it stops moving and looking |
 | `at`, `z`, `yaw`, `scale` | `[0,0]`, 0, 0, 1 | start position (studs), height, facing (deg, 0 = facing -y like characters), size factor |
 | `color`, `belly`, `wing` | green set | part-built colours |
 | `path` | none | `[{"t": s, "at": [x, y], "z": h}, ...]`: flies / walks between points, nose along the travel (landing = last point at z 0) |
